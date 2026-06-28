@@ -700,6 +700,40 @@ describe("buildSessionConfig", () => {
 		expect(config.compaction).toBeUndefined()
 	})
 
+	it("keeps SDK subagents and teams disabled when subagentsEnabled is false", async () => {
+		mocks.stateManager.getGlobalSettingsKey.mockImplementation((key: string) => {
+			if (key === "subagentsEnabled") {
+				return false
+			}
+			if (key === "useAutoCondense") {
+				return false
+			}
+			return undefined
+		})
+
+		const config = await buildSessionConfig({ cwd: "/tmp/workspace" })
+
+		expect(config.enableSpawnAgent).toBe(false)
+		expect(config.enableAgentTeams).toBe(false)
+	})
+
+	it("enables SDK subagents and teams when subagentsEnabled is true", async () => {
+		mocks.stateManager.getGlobalSettingsKey.mockImplementation((key: string) => {
+			if (key === "subagentsEnabled") {
+				return true
+			}
+			if (key === "useAutoCondense") {
+				return false
+			}
+			return undefined
+		})
+
+		const config = await buildSessionConfig({ cwd: "/tmp/workspace" })
+
+		expect(config.enableSpawnAgent).toBe(true)
+		expect(config.enableAgentTeams).toBe(true)
+	})
+
 	it("lets task useAutoCondense override the global setting", async () => {
 		let globalUseAutoCondense = true
 		mocks.stateManager.getGlobalSettingsKey.mockImplementation((key: string) => {

@@ -658,6 +658,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	const globalUseAutoCondense = stateManager.getGlobalSettingsKey("useAutoCondense") ?? false
 	const compactionStrategy = readCompactionStrategyGlobally()
 	const enableCheckpoints = stateManager.getGlobalSettingsKey("enableCheckpointsSetting") ?? true
+	const subagentsEnabled = stateManager.getGlobalSettingsKey("subagentsEnabled") ?? false
 	const useAutoCondense = input.taskSettings?.useAutoCondense ?? globalUseAutoCondense
 
 	// Core resolves providers against the SDK registry, which uses the SDK's
@@ -695,8 +696,8 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 		checkpoint: {
 			enabled: enableCheckpoints,
 		},
-		enableSpawnAgent: false,
-		enableAgentTeams: false,
+		enableSpawnAgent: subagentsEnabled,
+		enableAgentTeams: subagentsEnabled,
 		...(useAutoCondense
 			? {
 					compaction: {
