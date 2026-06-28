@@ -20,7 +20,6 @@ import { AskSageProvider } from "./providers/AskSageProvider"
 import { BasetenProvider } from "./providers/BasetenProvider"
 import { BedrockProvider } from "./providers/BedrockProvider"
 import { ClaudeCodeProvider } from "./providers/ClaudeCodeProvider"
-import { ClinePassProvider } from "./providers/ClinePassProvider"
 import { ClineProvider } from "./providers/ClineProvider"
 import { DifyProvider } from "./providers/DifyProvider"
 import { GenericProviderSettings } from "./providers/GenericProviderSettings"
@@ -175,15 +174,24 @@ const ApiOptions = ({
 		// Filter by remote config if remoteConfiguredProviders is set
 		const remoteProviders: string[] = remoteConfigSettings?.remoteConfiguredProviders || []
 		if (remoteProviders.length > 0) {
-			providers = providers.filter((option) => remoteProviders.includes(option.value))
+			const effectiveRemoteProviders =
+				isClinePassEnabled && remoteProviders.includes("cline-pass") && !remoteProviders.includes("cline")
+					? [...remoteProviders, "cline"]
+					: remoteProviders
+			providers = providers.filter((option) => effectiveRemoteProviders.includes(option.value))
 		}
 
 		return providers
 	}, [catalogProviderListings, isClinePassEnabled, remoteConfigSettings])
 
+	const getProviderDisplayLabel = useCallback((option: (typeof PROVIDERS.list)[number]) => {
+		return option.value === "cline" ? "Cline Usage-Billing" : option.label
+	}, [])
+
 	const currentProviderLabel = useMemo(() => {
-		return providerOptions.find((option) => option.value === selectedProvider)?.label || selectedProvider
-	}, [providerOptions, selectedProvider])
+		const selectedOption = providerOptions.find((option) => option.value === selectedProvider)
+		return selectedOption ? getProviderDisplayLabel(selectedOption) : selectedProvider
+	}, [getProviderDisplayLabel, providerOptions, selectedProvider])
 
 	// Sync search term with current provider when not searching
 	useEffect(() => {
@@ -195,13 +203,19 @@ const ApiOptions = ({
 	const searchableItems = useMemo(() => {
 		return providerOptions.map((option) => ({
 			value: option.value,
-			html: option.label,
+			html: getProviderDisplayLabel(option),
+			searchText:
+				option.value === "cline"
+					? "Cline Usage Billing usage based pay as you go"
+					: option.value === "cline-pass"
+						? "ClinePass subscription included models"
+						: option.label,
 		}))
-	}, [providerOptions])
+	}, [getProviderDisplayLabel, providerOptions])
 
 	const fuse = useMemo(() => {
 		return new Fuse(searchableItems, {
-			keys: ["html"],
+			keys: ["html", "searchText"],
 			threshold: 0.3,
 			shouldSort: true,
 			isCaseSensitive: false,
@@ -390,17 +404,14 @@ const ApiOptions = ({
 				<HicapProvider currentMode={currentMode} isPopup={isPopup} showModelOptions={showModelOptions} />
 			)}
 
-			{apiConfiguration && selectedProvider === "cline" && (
+			{apiConfiguration && (selectedProvider === "cline" || (isClinePassEnabled && selectedProvider === "cline-pass")) && (
 				<ClineProvider
 					currentMode={currentMode}
 					initialModelTab={initialModelTab}
 					isPopup={isPopup}
+					selectedProvider={selectedProvider}
 					showModelOptions={showModelOptions}
 				/>
-			)}
-
-			{apiConfiguration && isClinePassEnabled && selectedProvider === "cline-pass" && (
-				<ClinePassProvider currentMode={currentMode} isPopup={isPopup} showModelOptions={showModelOptions} />
 			)}
 
 			{apiConfiguration && selectedProvider === "asksage" && (

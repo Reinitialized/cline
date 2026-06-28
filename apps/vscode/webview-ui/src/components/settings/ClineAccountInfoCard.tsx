@@ -39,7 +39,7 @@ export const ClineAccountInfoCard = ({ usageLink }: { usageLink?: string }) => {
 		<div className="max-w-[600px]">
 			{user ? (
 				<VSCodeButton appearance="secondary" onClick={handleShowAccount}>
-					View Billing & Usage
+					View Billing History
 				</VSCodeButton>
 			) : (
 				<div className="flex flex-col gap-3">

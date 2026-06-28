@@ -1,6 +1,6 @@
 import type { ModelInfo } from "@shared/api"
 import { openAiModelInfoSafeDefaults } from "@shared/api"
-import { Mode } from "@shared/storage/types"
+import type { Mode } from "@shared/storage/types"
 import { buildClinePassSubscriptionPageUrl } from "@/components/onboarding/clinePassSubscribe"
 import { useClineAuth } from "@/context/ClineAuthContext"
 import { useProviderConfig } from "@/hooks/useProviderConfig"
@@ -15,6 +15,7 @@ interface ClinePassProviderProps {
 	showModelOptions: boolean
 	isPopup?: boolean
 	currentMode: Mode
+	showAccountCard?: boolean
 }
 
 const CLINE_PASS_PROVIDER_ID = "cline-pass"
@@ -36,7 +37,12 @@ function clinePassFallbackModelInfo(modelId: string): ModelInfo {
  * card + model selection), but resolve and persist selections through the SDK
  * provider catalog under providerId="cline-pass".
  */
-export const ClinePassProvider = ({ showModelOptions, isPopup, currentMode }: ClinePassProviderProps) => {
+export const ClinePassProvider = ({
+	showModelOptions,
+	isPopup,
+	currentMode,
+	showAccountCard = true,
+}: ClinePassProviderProps) => {
 	const { models, defaultModelId, isLoading, isStale, error } = useProviderModels(CLINE_PASS_PROVIDER_ID)
 	const { config, write, commitSelection } = useProviderConfig(CLINE_PASS_PROVIDER_ID)
 	const { selectedModel, commitModelSelection } = useProviderModelSelection(CLINE_PASS_PROVIDER_ID, currentMode, {
@@ -54,9 +60,11 @@ export const ClinePassProvider = ({ showModelOptions, isPopup, currentMode }: Cl
 
 	return (
 		<div>
-			<div style={{ marginBottom: 14, marginTop: 4 }}>
-				<ClineAccountInfoCard usageLink={buildClinePassSubscriptionPageUrl(clineUser?.appBaseUrl)} />
-			</div>
+			{showAccountCard && (
+				<div style={{ marginBottom: 14, marginTop: 4 }}>
+					<ClineAccountInfoCard usageLink={buildClinePassSubscriptionPageUrl(clineUser?.appBaseUrl)} />
+				</div>
+			)}
 
 			{showModelOptions && (
 				<>
