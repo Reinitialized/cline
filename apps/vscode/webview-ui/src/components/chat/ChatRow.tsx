@@ -931,6 +931,13 @@ export const ChatRowContent = memo(
 								Loading MCP documentation
 							</div>
 						)
+					case "info":
+						return (
+							<div className="text-foreground flex items-center opacity-70 text-[12px] py-1 px-0">
+								<i className="codicon codicon-info mr-1.5" />
+								<span className="ph-no-capture break-words">{message.text}</span>
+							</div>
+						)
 					case "completion_result":
 						const hasChanges = message.text?.endsWith(COMPLETION_RESULT_CHANGES_FLAG) ?? false
 						const text = hasChanges ? message.text?.slice(0, -COMPLETION_RESULT_CHANGES_FLAG.length) : message.text

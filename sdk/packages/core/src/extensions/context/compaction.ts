@@ -463,6 +463,19 @@ export function createContextCompactionPrepareTurn(
 				(total: number, message) => total + estimateMessageTokens(message),
 				0,
 			);
+			if (mode === "auto") {
+				context.emitStatusNotice?.("auto-compacted context", {
+					kind: statusReason,
+					reason: statusReason,
+					iteration: context.iteration,
+					triggerTokens: targetState.triggerTokens,
+					maxInputTokens,
+					inputTokens,
+					afterTokens,
+					tokensSaved: inputTokens - afterTokens,
+					durationMs,
+				});
+			}
 			config.logger?.log("Context compaction completed", {
 				severity: "info",
 				strategy: strategy,

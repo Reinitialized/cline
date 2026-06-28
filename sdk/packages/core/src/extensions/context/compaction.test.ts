@@ -632,6 +632,16 @@ describe("createContextCompactionPrepareTurn", () => {
 				iteration: 1,
 			}),
 		);
+		expect(emitStatusNotice).toHaveBeenCalledWith(
+			"auto-compacted context",
+			expect.objectContaining({
+				kind: "auto_compaction",
+				reason: "auto_compaction",
+				iteration: 1,
+				tokensSaved: expect.any(Number),
+				durationMs: expect.any(Number),
+			}),
+		);
 		expect(result?.messages).toHaveLength(5);
 		expect(result?.messages[0]).toMatchObject({
 			role: "user",
@@ -1083,6 +1093,14 @@ describe("createContextCompactionPrepareTurn", () => {
 			expect.objectContaining({
 				kind: "auto_compaction",
 				reason: "auto_compaction",
+			}),
+		);
+		expect(emitStatusNotice).toHaveBeenCalledWith(
+			"auto-compacted context",
+			expect.objectContaining({
+				kind: "auto_compaction",
+				reason: "auto_compaction",
+				tokensSaved: expect.any(Number),
 			}),
 		);
 		expect(result?.messages).toBeDefined();
