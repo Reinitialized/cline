@@ -82,4 +82,20 @@ describe("buildSdkProviderConfig", () => {
 		})
 		expect(mocks.providerSettingsManager.getProviderSettings).toHaveBeenCalledWith("v0")
 	})
+	it("preserves xhigh reasoning effort for SDK-backed providers", () => {
+		const providerConfig = buildSdkProviderConfig(
+			{
+				actModeApiProvider: "deepseek",
+				actModeApiModelId: "deepseek-v4-pro",
+				actModeReasoningEffort: "xhigh",
+			},
+			"act",
+		)
+
+		expect(providerConfig).toMatchObject({
+			providerId: "deepseek",
+			modelId: "deepseek-v4-pro",
+			reasoningEffort: "xhigh",
+		})
+	})
 })

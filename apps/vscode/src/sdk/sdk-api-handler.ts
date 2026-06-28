@@ -82,7 +82,12 @@ export function buildSdkProviderConfig(
 	if (thinkingBudgetTokens && thinkingBudgetTokens > 0) {
 		return { ...base, thinkingBudgetTokens }
 	}
-	if (reasoningEffort === "low" || reasoningEffort === "medium" || reasoningEffort === "high") {
+	if (
+		reasoningEffort === "low" ||
+		reasoningEffort === "medium" ||
+		reasoningEffort === "high" ||
+		reasoningEffort === "xhigh"
+	) {
 		return { ...base, reasoningEffort }
 	}
 	return base
