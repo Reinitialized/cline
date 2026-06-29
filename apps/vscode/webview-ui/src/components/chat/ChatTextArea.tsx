@@ -1118,6 +1118,8 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			switch (selectedProvider) {
 				case "cline":
 					return `${selectedProvider}:${selectedModelId}`
+				case "cline-pass":
+					return `${selectedProvider}:${selectedModelId.replace(/^cline-pass\//, "")}`
 				case "openai":
 					return `openai-compat:${selectedModelId}`
 				case "vscode-lm":

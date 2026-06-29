@@ -23,7 +23,7 @@ export function shouldSkipReasoningForModel(modelId?: string): boolean {
 	if (!modelId) {
 		return false
 	}
-	return modelId.includes("grok-4") || modelId.includes("devstral") || modelId.includes("glm")
+	return modelId.includes("grok-4") || modelId.includes("devstral")
 }
 
 function isAnthropicModelId(modelId: string): modelId is AnthropicModelId {
