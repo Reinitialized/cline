@@ -55,9 +55,9 @@ export const CLINE_ONBOARDING_MODELS: OnboardingModel[] = [
 	},
 	{
 		group: "frontier",
-		id: "anthropic/claude-sonnet-4.5",
-		name: "Anthropic: Claude Sonnet 4.5",
-		badge: "",
+		id: "anthropic/claude-sonnet-5",
+		name: "Anthropic: Claude Sonnet 5",
+		badge: "Best",
 		score: 97,
 		latency: 3,
 		info: {

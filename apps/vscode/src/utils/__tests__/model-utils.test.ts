@@ -1,6 +1,7 @@
-import { describe, it } from "bun:test"
+import { describe, it } from "mocha"
 import "should"
-import type { ApiHandlerModel } from "@core/api"
+import type { ApiHandlerModel, ApiProviderInfo } from "@core/api"
+import { isClaudeAdaptiveThinkingModel } from "@shared/utils/reasoning-support"
 import {
 	GEMINI_FLASH_MAX_OUTPUT_TOKENS,
 	isClaude4PlusModelFamily,
@@ -8,6 +9,7 @@ import {
 	isGLMModelFamily,
 	isGPT5ModelFamily,
 	isGptOssModelFamily,
+	isNativeToolCallingConfig,
 	isNextGenModelFamily,
 	isPoolsideModelFamily,
 	modelDoesntSupportWebp,
@@ -17,6 +19,11 @@ import {
 
 // Minimal helper — modelDoesntSupportWebp only reads apiHandlerModel.id
 const m = (id: string): ApiHandlerModel => ({ id, info: { supportsPromptCache: false } })
+const providerInfo = (providerId: string, modelId: string): ApiProviderInfo => ({
+	providerId,
+	model: m(modelId),
+	mode: "act",
+})
 
 describe("shouldSkipReasoningForModel", () => {
 	it("should return true for grok-4 models", () => {
@@ -98,6 +105,18 @@ describe("isClaude4PlusModelFamily", () => {
 	})
 })
 
+describe("isClaudeAdaptiveThinkingModel", () => {
+	it("should return true for Claude Sonnet 5 IDs across provider naming variants", () => {
+		for (const modelId of [
+			"claude-sonnet-5",
+			"anthropic/claude-sonnet-5:1m",
+			"anthropic/claude-5-sonnet",
+		]) {
+			isClaudeAdaptiveThinkingModel(modelId).should.equal(true)
+		}
+	})
+})
+
 describe("isGPT5ModelFamily", () => {
 	it("should return true for GPT-5 model IDs with hyphen", () => {
 		isGPT5ModelFamily("gpt-5").should.equal(true)
@@ -158,8 +177,10 @@ describe("isPoolsideModelFamily", () => {
 		isPoolsideModelFamily("claude-sonnet-4").should.equal(false)
 	})
 
-	it("should qualify Laguna models for next-gen paths", () => {
+	it("should qualify Laguna models for next-gen and native tool calling paths", () => {
 		isNextGenModelFamily("poolside/laguna-m.1").should.equal(true)
+		isNativeToolCallingConfig(providerInfo("openai-compatible", "poolside/laguna-m.1"), true).should.equal(true)
+		isNativeToolCallingConfig(providerInfo("openai-compatible", "poolside/laguna-m.1"), false).should.equal(false)
 	})
 })
 
