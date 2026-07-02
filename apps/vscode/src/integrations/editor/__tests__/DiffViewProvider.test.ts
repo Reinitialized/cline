@@ -1,80 +1,13 @@
-import { describe, it } from "bun:test"
 import * as assert from "assert"
-import * as fs from "fs/promises"
-import * as os from "os"
-import * as path from "path"
-import { HostProvider } from "@/hosts/host-provider"
-import type { DiffEditSurface, DiffViewTelemetry } from "../DiffViewProvider"
+import { describe, it } from "mocha"
 import { DiffViewProvider } from "../DiffViewProvider"
 
-type DiffTelemetryEvent = {
-	type: "opened" | "accepted" | "rejected" | "reverted"
-	attributes: Record<string, unknown>
-}
-
-function stubDiffTelemetry(): { events: DiffTelemetryEvent[]; telemetry: DiffViewTelemetry } {
-	const events: DiffTelemetryEvent[] = []
-	const telemetry = {
-		captureDiffViewOpened: (attributes = {}) => {
-			events.push({ type: "opened", attributes })
-		},
-		captureDiffViewAccepted: (attributes = {}) => {
-			events.push({ type: "accepted", attributes })
-		},
-		captureDiffViewRejected: (attributes = {}) => {
-			events.push({ type: "rejected", attributes })
-		},
-		captureDiffViewReverted: (attributes = {}) => {
-			events.push({ type: "reverted", attributes })
-		},
-	}
-	return { events, telemetry }
-}
-
-function setupHostProviderForDiffTests(workspacePath: string): void {
-	HostProvider.reset()
-	HostProvider.initialize(
-		(() => {}) as never,
-		(() => {}) as never,
-		(() => {}) as never,
-		(() => ({})) as never,
-		{
-			workspaceClient: {
-				getWorkspacePaths: async () => ({ paths: [workspacePath] }),
-				saveOpenDocumentIfDirty: async () => ({}),
-				getDiagnostics: async () => ({ fileDiagnostics: [] }),
-			} as never,
-			envClient: {} as never,
-			windowClient: {} as never,
-			diffClient: {} as never,
-		},
-		() => {},
-		async () => "http://example.com/callback",
-		async () => "/mock/binary",
-		"/mock/extension",
-		"/mock/globalStorage",
-	)
-}
-
 class TestBoundaryDiffViewProvider extends DiffViewProvider {
-	protected readonly editSurface: DiffEditSurface = "vscode_diff"
 	public documentText: string = ""
 	public truncatedAt: number | undefined
-	public openedCount = 0
-	public scrolledToLine: number | undefined
-	private shouldSave = true
 
-	constructor(telemetry?: DiffViewTelemetry) {
-		super(telemetry)
-	}
-
-	async openDiffEditor(): Promise<void> {
-		this.openedCount++
-		this.documentText = this.originalContent || ""
-	}
-	async scrollEditorToLine(line: number): Promise<void> {
-		this.scrolledToLine = line
-	}
+	async openDiffEditor(): Promise<void> {}
+	async scrollEditorToLine(line: number): Promise<void> {}
 	async scrollAnimation(startLine: number, endLine: number): Promise<void> {}
 
 	async truncateDocument(lineNumber: number): Promise<void> {
@@ -93,8 +26,8 @@ class TestBoundaryDiffViewProvider extends DiffViewProvider {
 		return this.documentText
 	}
 
-	async saveDocument(): Promise<boolean> {
-		return this.shouldSave
+	async saveDocument(): Promise<Boolean> {
+		return true
 	}
 	async closeAllDiffViews(): Promise<void> {}
 	async resetDiffView(): Promise<void> {}
@@ -128,18 +61,6 @@ class TestBoundaryDiffViewProvider extends DiffViewProvider {
 		this.documentText = initialContent
 		this.originalContent = initialContent
 		this.truncatedAt = undefined
-	}
-
-	public setupOpenState(absolutePath: string, editType: "create" | "modify" | "delete" = "modify") {
-		this.isEditing = true
-		this.absolutePath = absolutePath
-		this.relPath = absolutePath
-		this.editType = editType
-		this.originalContent = this.documentText
-	}
-
-	public setSaveResult(shouldSave: boolean) {
-		this.shouldSave = shouldSave
 	}
 }
 
@@ -269,127 +190,6 @@ describe("DiffViewProvider content finalization with isFinal=true", () => {
 	})
 })
 
-describe("DiffViewProvider telemetry lifecycle", () => {
-	it("open() emits opened telemetry with edit surface metadata", async () => {
-		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "cline-diff-telemetry-open-"))
-		const filePath = path.join(tempDir, "file.txt")
-		await fs.writeFile(filePath, "original")
-		setupHostProviderForDiffTests(tempDir)
-		const { events, telemetry } = stubDiffTelemetry()
-		try {
-			const provider = new TestBoundaryDiffViewProvider(telemetry)
-			provider.editType = "modify"
-
-			await provider.open("file.txt")
-
-			assert.strictEqual(events.length, 1)
-			assert.strictEqual(events[0].type, "opened")
-			assert.strictEqual(events[0].attributes.editType, "modify")
-			assert.strictEqual(events[0].attributes.editSurface, "vscode_diff")
-			assert.strictEqual(events[0].attributes.isNotebook, false)
-			assert.strictEqual(provider.openedCount, 1)
-			assert.strictEqual(provider.scrolledToLine, 0)
-		} finally {
-			HostProvider.reset()
-			await fs.rm(tempDir, { recursive: true, force: true })
-		}
-	})
-
-	it("saveChanges() emits accepted once and reset re-arms accepted telemetry", async () => {
-		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "cline-diff-telemetry-accept-"))
-		setupHostProviderForDiffTests(tempDir)
-		const { events, telemetry } = stubDiffTelemetry()
-		try {
-			const provider = new TestBoundaryDiffViewProvider(telemetry)
-			const filePath = path.join(tempDir, "file.txt")
-			provider.setup("original")
-			provider.setupOpenState(filePath, "modify")
-			await provider.update("changed", true)
-
-			await provider.saveChanges()
-			await provider.saveChanges()
-
-			assert.deepStrictEqual(events.map((event) => event.type), ["accepted"])
-
-			await provider.reset()
-			provider.setup("changed")
-			provider.setupOpenState(filePath, "modify")
-			await provider.update("changed again", true)
-			await provider.saveChanges()
-
-			assert.deepStrictEqual(events.map((event) => event.type), ["accepted", "accepted"])
-		} finally {
-			HostProvider.reset()
-			await fs.rm(tempDir, { recursive: true, force: true })
-		}
-	})
-
-	it("saveChanges() does not emit accepted telemetry when saveDocument returns false", async () => {
-		const { events, telemetry } = stubDiffTelemetry()
-		const provider = new TestBoundaryDiffViewProvider(telemetry)
-		provider.setup("original")
-		provider.setupOpenState("/tmp/file.txt", "modify")
-		provider.setSaveResult(false)
-		await provider.update("changed", true)
-
-		await provider.saveChanges()
-
-		assert.deepStrictEqual(events.map((event) => event.type), [])
-	})
-
-	it("recordDiffViewRejected() is idempotent and revert records previous rejected outcome", async () => {
-		const { events, telemetry } = stubDiffTelemetry()
-		try {
-			const provider = new TestBoundaryDiffViewProvider(telemetry)
-			provider.setup("original")
-			provider.setupOpenState("/tmp/file.txt", "modify")
-
-			provider.recordDiffViewRejected()
-			provider.recordDiffViewRejected()
-			await provider.revertChanges("user_rejected")
-
-			assert.deepStrictEqual(events.map((event) => event.type), ["rejected", "reverted"])
-			assert.strictEqual(events[1].attributes.revertReason, "user_rejected")
-			assert.strictEqual(events[1].attributes.previousOutcome, "rejected")
-		} finally {
-		}
-	})
-
-	it("revert after accept records previous accepted outcome", async () => {
-		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "cline-diff-telemetry-revert-"))
-		setupHostProviderForDiffTests(tempDir)
-		const { events, telemetry } = stubDiffTelemetry()
-		try {
-			const provider = new TestBoundaryDiffViewProvider(telemetry)
-			provider.setup("original")
-			provider.setupOpenState(path.join(tempDir, "file.txt"), "modify")
-			await provider.update("changed", true)
-			await provider.saveChanges()
-
-			await provider.revertChanges("error_cleanup")
-
-			assert.deepStrictEqual(events.map((event) => event.type), ["accepted", "reverted"])
-			assert.strictEqual(events[1].attributes.revertReason, "error_cleanup")
-			assert.strictEqual(events[1].attributes.previousOutcome, "accepted")
-		} finally {
-			HostProvider.reset()
-			await fs.rm(tempDir, { recursive: true, force: true })
-		}
-	})
-
-	it("revertChanges() emits nothing when not editing", async () => {
-		const { events, telemetry } = stubDiffTelemetry()
-		try {
-			const provider = new TestBoundaryDiffViewProvider(telemetry)
-
-			await provider.revertChanges("error_cleanup")
-
-			assert.deepStrictEqual(events, [])
-		} finally {
-		}
-	})
-})
-
 describe("DiffViewProvider Update Throttling", () => {
 	// Tests for the throttling added in PR #8785 to prevent performance issues
 	// during streaming, especially with large files like notebooks.
@@ -399,7 +199,6 @@ describe("DiffViewProvider Update Throttling", () => {
 	// Only the final line (without trailing newline) is deferred until isFinal=true.
 
 	class ThrottleTestDiffViewProvider extends DiffViewProvider {
-		protected readonly editSurface: DiffEditSurface = "vscode_diff"
 		public documentText: string = ""
 		public replaceTextCallCount = 0
 
@@ -416,7 +215,7 @@ describe("DiffViewProvider Update Throttling", () => {
 			return this.documentText
 		}
 
-		async saveDocument(): Promise<boolean> {
+		async saveDocument(): Promise<Boolean> {
 			return true
 		}
 		async closeAllDiffViews(): Promise<void> {}
@@ -478,7 +277,9 @@ describe("DiffViewProvider Update Throttling", () => {
 		assert.strictEqual(provider.replaceTextCallCount, 1, "Rapid updates should be throttled")
 	})
 
-	it("should allow update after throttle period", async () => {
+	it("should allow update after throttle period", async function () {
+		this.timeout(500) // Allow time for the delay
+
 		const provider = new ThrottleTestDiffViewProvider()
 		provider.setup("initial\n")
 
@@ -492,7 +293,7 @@ describe("DiffViewProvider Update Throttling", () => {
 		// Next update should go through
 		await provider.update("line1\nline2\n", false)
 		assert.strictEqual(provider.replaceTextCallCount, 2, "Update after throttle period should go through")
-	}, 500)
+	})
 
 	it("should always process final updates regardless of throttling", async () => {
 		const provider = new ThrottleTestDiffViewProvider()
@@ -532,7 +333,9 @@ describe("DiffViewProvider Update Throttling", () => {
 		assert.strictEqual(provider.replaceTextCallCount, 2, "Final update should bypass length check")
 	})
 
-	it("should reset throttle state on reset()", async () => {
+	it("should reset throttle state on reset()", async function () {
+		this.timeout(500)
+
 		const provider = new ThrottleTestDiffViewProvider()
 		provider.setup("initial\n")
 
@@ -553,7 +356,7 @@ describe("DiffViewProvider Update Throttling", () => {
 		// Update immediately after reset should go through (throttle state cleared)
 		await provider.update("newcontent\n", false)
 		assert.strictEqual(provider.replaceTextCallCount, 1, "Update after reset should go through immediately")
-	}, 500)
+	})
 
 	it("should allow first update to go through immediately", async () => {
 		const provider = new ThrottleTestDiffViewProvider()
@@ -564,7 +367,9 @@ describe("DiffViewProvider Update Throttling", () => {
 		assert.strictEqual(provider.replaceTextCallCount, 1, "First update should not be throttled")
 	})
 
-	it("should handle streaming simulation with many rapid updates", async () => {
+	it("should handle streaming simulation with many rapid updates", async function () {
+		this.timeout(500)
+
 		const provider = new ThrottleTestDiffViewProvider()
 		provider.setup("")
 
@@ -590,9 +395,11 @@ describe("DiffViewProvider Update Throttling", () => {
 		// Final update always goes through
 		await provider.update(contentAfterWait + "end", true)
 		assert.strictEqual(provider.replaceTextCallCount, 3, "Final update should go through")
-	}, 500)
+	})
 
-	it("should throttle by time regardless of content length changes", async () => {
+	it("should throttle by time regardless of content length changes", async function () {
+		this.timeout(500)
+
 		const provider = new ThrottleTestDiffViewProvider()
 		provider.setup("")
 
@@ -610,7 +417,7 @@ describe("DiffViewProvider Update Throttling", () => {
 		// Now should go through
 		await provider.update("line1\nline2\nline3\nline4\n", false)
 		assert.strictEqual(provider.replaceTextCallCount, 2, "Should update after throttle period")
-	}, 500)
+	})
 })
 
 describe("DiffViewProvider Newline Preservation", () => {
