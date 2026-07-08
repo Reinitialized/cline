@@ -40,6 +40,18 @@ export type ModelsDevProviderKeyMap = Record<string, string>;
 const DEFAULT_MAX_INPUT_TOKENS = 128_000;
 const DEFAULT_MAX_TOKENS = 4096;
 
+const OFFICIAL_MODEL_LIMIT_OVERRIDES: Record<
+	string,
+	{ contextWindow: number; maxTokens: number }
+> = {
+	// OpenAI documents GPT-5.5 with a 1M context window and 128K max output.
+	"gpt-5.5": { contextWindow: 1_000_000, maxTokens: 128_000 },
+	// OpenAI documents GPT-5-Codex / GPT-5.1-Codex API models with a
+	// 400K context window and 128K max output.
+	"gpt-5-codex": { contextWindow: 400_000, maxTokens: 128_000 },
+	"gpt-5.1-codex": { contextWindow: 400_000, maxTokens: 128_000 },
+};
+
 function parseReleaseDate(value: string | undefined): number {
 	if (!value) {
 		return Number.NEGATIVE_INFINITY;
@@ -117,6 +129,27 @@ export function resolveMaxInputTokens(
 }
 
 function toModelInfo(modelId: string, model: ModelsDevModel): ModelInfo {
+	const officialLimits = OFFICIAL_MODEL_LIMIT_OVERRIDES[modelId] ?? OFFICIAL_MODEL_LIMIT_OVERRIDES[model.name ?? ""];
+	if (officialLimits) {
+		return {
+			id: modelId,
+			name: model.name || modelId,
+			contextWindow: officialLimits.contextWindow,
+			maxInputTokens: officialLimits.contextWindow - officialLimits.maxTokens,
+			maxTokens: officialLimits.maxTokens,
+			capabilities: toCapabilities(model),
+			pricing: {
+				input: model.cost?.input ?? 0,
+				output: model.cost?.output ?? 0,
+				cacheRead: model.cost?.cache_read ?? 0,
+				cacheWrite: model.cost?.cache_write ?? 0,
+			},
+			status: toStatus(model.status),
+			releaseDate: model.release_date,
+			family: model.family,
+		};
+	}
+
 	// If context or output limits are missing, default to DEFAULT_MAX_INPUT_TOKENS and DEFAULT_MAX_TOKENS respectively.
 	const maxInputTokens = resolveMaxInputTokens(model.limit);
 	const outputToken = model.limit?.output ?? DEFAULT_MAX_TOKENS;

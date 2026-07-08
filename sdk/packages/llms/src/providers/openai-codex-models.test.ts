@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ModelInfo } from "../catalog/types";
 import {
 	CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+	CODEX_SUBSCRIPTION_CONTEXT_WINDOW,
 	filterOpenAICodexModels,
 } from "./openai-codex-models";
 
@@ -62,39 +63,44 @@ describe("filterOpenAICodexModels", () => {
 
 	describe("context window adjustment", () => {
 		it.each(["gpt-5.4", "gpt-5.4-mini", "gpt-6.0"])(
-			"scales %s maxInputTokens down to the effective Codex budget — the backend cap applies to every model, not just gpt-5.5",
+			"clamps %s to the effective ChatGPT/Codex subscription budget — the backend cap applies to every model, not just gpt-5.5",
 			(id) => {
-				const maxInputTokens = 200_000;
-				const result = filterOne(id, { maxInputTokens });
+				const result = filterOne(id, {
+					contextWindow: 1_000_000,
+					maxInputTokens: 872_000,
+				});
+				expect(result?.contextWindow).toBe(CODEX_SUBSCRIPTION_CONTEXT_WINDOW);
 				expect(result?.maxInputTokens).toBe(
-					maxInputTokens * CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+					CODEX_SUBSCRIPTION_CONTEXT_WINDOW * CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
 				);
 			},
 		);
 
-		it("leaves other limits untouched for non-5.5 models", () => {
+		it("leaves output limits untouched for non-API-Codex models", () => {
 			const result = filterOne("gpt-6.0", {
 				contextWindow: 500_000,
 				maxTokens: 64_000,
 			});
-			expect(result?.contextWindow).toBe(500_000);
+			expect(result?.contextWindow).toBe(CODEX_SUBSCRIPTION_CONTEXT_WINDOW);
 			expect(result?.maxTokens).toBe(64_000);
 		});
 
-		it("preserves an undefined maxInputTokens instead of producing NaN", () => {
+		it("falls back to the clamped context window when maxInputTokens is undefined", () => {
 			const result = filterOne("gpt-6.0", { maxInputTokens: undefined });
-			expect(result?.maxInputTokens).toBeUndefined();
+			expect(result?.maxInputTokens).toBe(
+				CODEX_SUBSCRIPTION_CONTEXT_WINDOW * CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+			);
 		});
 
-		it("overrides gpt-5.5 limits with the documented ChatGPT Codex subscription caps", () => {
+		it("overrides gpt-5.5 API limits with the documented ChatGPT Codex subscription caps", () => {
 			const result = filterOne("gpt-5.5-codex", {
-				contextWindow: 128_000,
+				contextWindow: 1_000_000,
 				maxInputTokens: 900_000,
 				maxTokens: 128_000,
 			});
 			expect(result).toMatchObject({
-				contextWindow: 1_000_000,
-				maxInputTokens: (1_000_000 - 128_000) * CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+				contextWindow: CODEX_SUBSCRIPTION_CONTEXT_WINDOW,
+				maxInputTokens: CODEX_SUBSCRIPTION_CONTEXT_WINDOW * CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
 				maxTokens: 128_000,
 			});
 		});

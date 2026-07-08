@@ -22,8 +22,8 @@ describe("provider settings", () => {
 		});
 
 		expect(config.knownModels?.["gpt-5.5"]).toMatchObject({
-			contextWindow: 1_000_000,
-			maxInputTokens: (1_000_000 - 128_000) * 0.95,
+			contextWindow: 128_000,
+			maxInputTokens: 128_000 * 0.95,
 			maxTokens: 128_000,
 		});
 	});

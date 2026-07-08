@@ -133,9 +133,10 @@ describe("built-in provider metadata", () => {
 		expect(chatGptModels["gpt-5.5"]).toEqual(
 			expect.objectContaining({
 				...openAiModels["gpt-5.5"],
-				// OpenAI documents GPT-5.5 with a 1M context window and 128K max output.
-				maxInputTokens: (1_000_000 - 128_000) * 0.95,
-				contextWindow: 1_000_000,
+				// OpenAI API documents GPT-5.5 with a 1M context window, but
+				// ChatGPT/Codex subscription requests are capped lower.
+				maxInputTokens: 128_000 * 0.95,
+				contextWindow: 128_000,
 				maxTokens: 128_000,
 			}),
 		);

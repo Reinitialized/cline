@@ -48,6 +48,7 @@ import { VertexProvider } from "./providers/VertexProvider"
 import { VSCodeLmProvider } from "./providers/VSCodeLmProvider"
 import { XaiProvider } from "./providers/XaiProvider"
 import { ZAiProvider } from "./providers/ZAiProvider"
+import { getModeSpecificFields } from "./utils/providerUtils"
 import { useApiConfigurationHandlers } from "./utils/useApiConfigurationHandlers"
 
 interface ApiOptionsProps {
@@ -513,7 +514,7 @@ const ApiOptions = ({
 				<AIhubmixProvider currentMode={currentMode} isPopup={isPopup} showModelOptions={showModelOptions} />
 			)}
 
-			{apiConfiguration && !isOpenAISpecialProvider && (selectedProvider.includes("openai") || isCustomProvider) && (
+			{apiConfiguration && !isOpenAISpecialProvider && (selectedProvider === "openai" || isCustomProvider) && (
 				<OpenAICompatibleProvider
 					currentMode={currentMode}
 					isPopup={isPopup}

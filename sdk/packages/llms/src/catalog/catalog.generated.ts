@@ -367,8 +367,8 @@ export const GENERATED_PROVIDER_MODELS: {
 			"gpt-5.5": {
 				id: "gpt-5.5",
 				name: "GPT-5.5",
-				contextWindow: 1050000,
-				maxInputTokens: 922000,
+				contextWindow: 1000000,
+				maxInputTokens: 872000,
 				maxTokens: 128000,
 				capabilities: [
 					"images",
@@ -6327,8 +6327,8 @@ export const GENERATED_PROVIDER_MODELS: {
 			"openai/gpt-5.5": {
 				id: "openai/gpt-5.5",
 				name: "OpenAI: GPT-5.5",
-				contextWindow: 1050000,
-				maxInputTokens: 1050000,
+				contextWindow: 1000000,
+				maxInputTokens: 872000,
 				maxTokens: 128000,
 				capabilities: ["images", "files", "tools", "reasoning", "prompt-cache"],
 				pricing: {
@@ -11283,8 +11283,8 @@ export const GENERATED_PROVIDER_MODELS: {
 			"gpt-5.5": {
 				id: "gpt-5.5",
 				name: "GPT-5.5",
-				contextWindow: 1050000,
-				maxInputTokens: 922000,
+				contextWindow: 1000000,
+				maxInputTokens: 872000,
 				maxTokens: 128000,
 				capabilities: [
 					"images",
@@ -13086,8 +13086,8 @@ export const GENERATED_PROVIDER_MODELS: {
 			"openai/gpt-5.5": {
 				id: "openai/gpt-5.5",
 				name: "GPT-5.5",
-				contextWindow: 1050000,
-				maxInputTokens: 922000,
+				contextWindow: 1000000,
+				maxInputTokens: 872000,
 				maxTokens: 128000,
 				capabilities: [
 					"images",
@@ -18206,8 +18206,8 @@ export const GENERATED_PROVIDER_MODELS: {
 			"gpt-5.5": {
 				id: "gpt-5.5",
 				name: "gpt-5.5",
-				contextWindow: 1050000,
-				maxInputTokens: 922000,
+				contextWindow: 1000000,
+				maxInputTokens: 872000,
 				maxTokens: 128000,
 				capabilities: [
 					"images",

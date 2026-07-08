@@ -167,6 +167,69 @@ describe("models-dev-catalog", () => {
 		).toBe(4096);
 	});
 
+	it("normalizes GPT-5.5 to OpenAI's documented context and output limits", () => {
+		const providerModels = normalizeModelsDevProviderModels({
+			openai: {
+				models: {
+					"gpt-5.5": {
+						name: "GPT-5.5",
+						tool_call: true,
+						limit: {
+							context: 1_050_000,
+							input: 922_000,
+							output: 128_000,
+						},
+					},
+				},
+			},
+		});
+
+		expect(providerModels["openai-native"]?.["gpt-5.5"]).toEqual(
+			expect.objectContaining({
+				contextWindow: 1_000_000,
+				maxInputTokens: 872_000,
+				maxTokens: 128_000,
+			}),
+		);
+	});
+
+	it("normalizes GPT-5 Codex API models to OpenAI's documented API limits", () => {
+		const providerModels = normalizeModelsDevProviderModels({
+			openai: {
+				models: {
+					"gpt-5.1-codex": {
+						name: "GPT-5.1-Codex",
+						tool_call: true,
+						limit: {
+							context: 1_050_000,
+							input: 922_000,
+							output: 128_000,
+						},
+					},
+					"gpt-5-codex": {
+						name: "GPT-5-Codex",
+						tool_call: true,
+						limit: {
+							context: 128_000,
+							input: 128_000,
+							output: 32_000,
+						},
+					},
+				},
+			},
+		});
+
+		for (const modelId of ["gpt-5.1-codex", "gpt-5-codex"] as const) {
+			expect(providerModels["openai-native"]?.[modelId]).toEqual(
+				expect.objectContaining({
+					contextWindow: 400_000,
+					maxInputTokens: 272_000,
+					maxTokens: 128_000,
+				}),
+			);
+		}
+	});
+
 	it("normalizes payload with model filtering and defaults", () => {
 		const payload: ModelsDevPayload = {
 			openai: {

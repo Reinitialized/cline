@@ -37,5 +37,6 @@ export {
 } from "./providers/model-registry";
 export {
 	CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+	CODEX_SUBSCRIPTION_CONTEXT_WINDOW,
 	filterOpenAICodexModels,
 } from "./providers/openai-codex-models";

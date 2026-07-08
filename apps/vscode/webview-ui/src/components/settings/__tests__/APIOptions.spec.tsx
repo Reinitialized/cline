@@ -13,6 +13,10 @@ vi.mock("../providers/GenericProviderSettings", () => ({
 	GenericProviderSettings: vi.fn((props) => <div data-testid="generic-provider-settings">{props.providerName}</div>),
 }))
 
+vi.mock("../providers/OpenAiCodexProvider", () => ({
+	OpenAiCodexProvider: vi.fn(() => <div data-testid="openai-codex-provider">OpenAI ChatGPT Subscription</div>),
+}))
+
 const mockProviderListings = (
 	providers: Array<{ id: string; name: string; protocol: string; allowsCustomModelIds: boolean }>,
 ) => {
@@ -228,6 +232,33 @@ describe("OpenApiInfoOptions", () => {
 		fireEvent.click(screen.getByText("Model Configuration"))
 		const modelInput = screen.getByText("Max Output Tokens")
 		expect(modelInput).toBeInTheDocument()
+	})
+})
+
+describe("OpenAI ChatGPT Subscription provider settings", () => {
+	const mockPostMessage = vi.fn()
+
+	beforeEach(() => {
+		vi.clearAllMocks()
+		//@ts-expect-error - vscode is not defined in the global namespace in test environment
+		global.vscode = { postMessage: mockPostMessage }
+		mockExtensionState({
+			planModeApiProvider: "openai-codex",
+			actModeApiProvider: "openai-codex",
+		})
+	})
+
+	it("does not render OpenAI-compatible API key and base URL fields", () => {
+		render(
+			<ExtensionStateContextProvider>
+				<ApiOptions currentMode="plan" showModelOptions={true} />
+			</ExtensionStateContextProvider>,
+		)
+
+		expect(screen.getByTestId("openai-codex-provider")).toBeInTheDocument()
+		expect(screen.queryByText("Base URL")).not.toBeInTheDocument()
+		expect(screen.queryByText("OpenAI Compatible API Key")).not.toBeInTheDocument()
+		expect(screen.queryByText("Custom Headers")).not.toBeInTheDocument()
 	})
 })
 
