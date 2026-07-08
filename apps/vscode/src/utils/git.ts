@@ -1,9 +1,10 @@
-import { exec } from "child_process"
+import { exec, spawn } from "child_process"
 import { promisify } from "util"
 import { Logger } from "@/shared/services/Logger"
 
 const execAsync = promisify(exec)
 const GIT_OUTPUT_LINE_LIMIT = 500
+const GIT_DIFF_CHAR_LIMIT = 5_000
 
 export interface GitCommit {
 	hash: string
@@ -203,14 +204,14 @@ export async function getGitDiff(cwd: string, stagedOnly = false): Promise<strin
 		// index against the empty tree), so it must NOT be gated on having a HEAD.
 		// This is the common case for the very first commit of a new repo.
 		let command = "git --no-pager diff --staged --diff-filter=d"
-		const { stdout: staged } = await execAsync(command, { cwd })
+		const staged = await getLimitedGitDiff(cwd, ["--no-pager", "diff", "--staged", "--diff-filter=d"])
 		diff = staged.trim()
 
 		// The unstaged fallback compares against HEAD, which only exists once the
 		// repo has at least one commit. Skip it in a commit-less repo.
 		if (!stagedOnly && !diff && (await checkGitRepoHasCommits(cwd))) {
 			command = "git --no-pager diff HEAD --diff-filter=d"
-			const { stdout: unstaged } = await execAsync(command, { cwd })
+			const unstaged = await getLimitedGitDiff(cwd, ["--no-pager", "diff", "HEAD", "--diff-filter=d"])
 			diff = unstaged.trim()
 		}
 
@@ -222,6 +223,44 @@ export async function getGitDiff(cwd: string, stagedOnly = false): Promise<strin
 	} catch (error) {
 		throw error
 	}
+}
+
+function getLimitedGitDiff(cwd: string, args: string[]): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const child = spawn("git", args, { cwd, windowsHide: true })
+		let stdout = ""
+		let stderr = ""
+		let didHitLimit = false
+
+		child.stdout.setEncoding("utf8")
+		child.stderr.setEncoding("utf8")
+
+		child.stdout.on("data", (chunk: string) => {
+			if (stdout.length < GIT_DIFF_CHAR_LIMIT) {
+				stdout += chunk.slice(0, GIT_DIFF_CHAR_LIMIT - stdout.length)
+			}
+
+			if (stdout.length >= GIT_DIFF_CHAR_LIMIT && !didHitLimit) {
+				didHitLimit = true
+				child.kill()
+			}
+		})
+
+		child.stderr.on("data", (chunk: string) => {
+			stderr += chunk
+		})
+
+		child.on("error", reject)
+
+		child.on("close", (code) => {
+			if (code === 0 || didHitLimit) {
+				resolve(didHitLimit ? `${stdout}\n\n[Diff truncated due to size]` : stdout)
+				return
+			}
+
+			reject(new Error(stderr.trim() || `git ${args.join(" ")} exited with code ${code}`))
+		})
+	})
 }
 
 export async function getGitRemoteUrls(cwd: string): Promise<string[]> {
