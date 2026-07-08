@@ -845,14 +845,22 @@ function toRuntimeProviderDefaults(
 	manifests: ReturnType<typeof getOpenAICompatibleProviderManifests>,
 ): Record<string, ProviderDefaults> {
 	return Object.fromEntries(
-		Object.entries(manifests).map(([providerId, manifest]) => [
-			providerId,
-			{
-				baseUrl: manifest.baseUrl,
-				modelId: manifest.modelId,
-				capabilities: toRuntimeCapabilities(manifest.capabilities),
-			},
-		]),
+		Object.entries(manifests).map(([providerId, manifest]) => {
+			const knownModels = manifest.knownModels
+				? cloneKnownModels(manifest.knownModels)
+				: undefined;
+			return [
+				providerId,
+				{
+					baseUrl: manifest.baseUrl,
+					modelId: manifest.modelId,
+					...(knownModels && Object.keys(knownModels).length > 0
+						? { knownModels }
+						: {}),
+					capabilities: toRuntimeCapabilities(manifest.capabilities),
+				},
+			];
+		}),
 	);
 }
 

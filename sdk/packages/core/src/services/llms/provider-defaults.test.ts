@@ -491,9 +491,9 @@ describe("resolveProviderConfig", () => {
 		expect(resolved?.knownModels?.["gpt-5.5"]).toEqual(
 			expect.objectContaining({
 				...openAiResolved?.knownModels?.["gpt-5.5"],
-				// ChatGPT/Codex backend caps: 272K input at the 95% effective budget
-				maxInputTokens: 272_000 * 0.95,
-				contextWindow: 400_000,
+				// OpenAI documents GPT-5.5 with a 1M context window and 128K max output.
+				maxInputTokens: (1_000_000 - 128_000) * 0.95,
+				contextWindow: 1_000_000,
 				maxTokens: 128_000,
 			}),
 		);

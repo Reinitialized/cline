@@ -15,6 +15,19 @@ describe("provider settings", () => {
 		expect(config.accessToken).toBe("oauth-access-token");
 	});
 
+	it("uses curated ChatGPT subscription model limits instead of generated OpenAI API limits", () => {
+		const config = toProviderConfig({
+			provider: "openai-codex",
+			model: "gpt-5.5",
+		});
+
+		expect(config.knownModels?.["gpt-5.5"]).toMatchObject({
+			contextWindow: 1_000_000,
+			maxInputTokens: (1_000_000 - 128_000) * 0.95,
+			maxTokens: 128_000,
+		});
+	});
+
 	it("accepts the Bedrock apikey authentication alias", () => {
 		const result = safeParseSettings({
 			provider: "bedrock",

@@ -86,15 +86,15 @@ describe("filterOpenAICodexModels", () => {
 			expect(result?.maxInputTokens).toBeUndefined();
 		});
 
-		it("overrides gpt-5.5 limits with the ChatGPT backend caps", () => {
+		it("overrides gpt-5.5 limits with the documented ChatGPT Codex subscription caps", () => {
 			const result = filterOne("gpt-5.5-codex", {
-				contextWindow: 1_000_000,
+				contextWindow: 128_000,
 				maxInputTokens: 900_000,
-				maxTokens: 900_000,
+				maxTokens: 128_000,
 			});
 			expect(result).toMatchObject({
-				contextWindow: 400_000,
-				maxInputTokens: 272_000 * CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+				contextWindow: 1_000_000,
+				maxInputTokens: (1_000_000 - 128_000) * CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
 				maxTokens: 128_000,
 			});
 		});

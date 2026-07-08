@@ -435,6 +435,43 @@ describe("prepareLocalRuntimeBootstrap", () => {
 		});
 	});
 
+	it("keeps curated ChatGPT subscription model limits in the runtime provider config", async () => {
+		const { prepareLocalRuntimeBootstrap } = await import(
+			"./local-runtime-bootstrap"
+		);
+
+		const input = createStartInput();
+		input.config.providerId = "openai-codex";
+		input.config.modelId = "gpt-5.5";
+		input.config.apiKey = "oauth-access-token";
+
+		const bootstrap = await prepareLocalRuntimeBootstrap({
+			input,
+			sessionId: "sess-codex-model-limits",
+			providerSettingsManager: createProviderSettingsManager({
+				provider: "openai-codex",
+				model: "gpt-5.5",
+				auth: {
+					accessToken: "oauth-access-token",
+					accountId: "acct-123",
+				},
+			}) as never,
+			defaultTelemetry: undefined,
+			defaultToolPolicies: undefined,
+			onPluginEvent: () => {},
+			onTeamEvent: () => {},
+			createSpawnTool,
+			readSessionMetadata: async () => undefined,
+			writeSessionMetadata: async () => {},
+		});
+
+		expect(bootstrap.providerConfig.knownModels?.["gpt-5.5"]).toMatchObject({
+			contextWindow: 1_000_000,
+			maxInputTokens: (1_000_000 - 128_000) * 0.95,
+			maxTokens: 128_000,
+		});
+	});
+
 	it("keeps Codex-controlled headers from being overridden by stored or config headers", async () => {
 		const { prepareLocalRuntimeBootstrap } = await import(
 			"./local-runtime-bootstrap"

@@ -29,17 +29,20 @@ function isOpenAICodexAllowedModel(id: string, model: ModelInfo): boolean {
 
 /**
  * Applies the effective input budget to every allowed model. GPT-5.5
- * additionally gets hardcoded limits because the ChatGPT/Codex backend
- * enforces a 272K input / 128K output cap that is lower than what the
- * generated OpenAI API catalog reports.
+ * additionally gets hardcoded limits because OpenAI documents it with a
+ * 1M-token context window and 128K-token max output, while some upstream
+ * catalogs report lower ChatGPT/Codex subscription limits.
  */
 function toOpenAICodexModel(id: string, model: ModelInfo): ModelInfo {
 	if (id.includes("gpt-5.5")) {
+		const contextWindow = 1_000_000;
+		const maxTokens = 128_000;
+		const maxInputTokens = contextWindow - maxTokens;
 		return {
 			...model,
-			contextWindow: 400_000,
-			maxInputTokens: 272_000 * CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
-			maxTokens: 128_000,
+			contextWindow,
+			maxInputTokens: maxInputTokens * CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+			maxTokens,
 		};
 	}
 	return {
