@@ -16,6 +16,7 @@ const ProviderKeyMap: Partial<Record<ApiProvider, string>> = {
 	openrouter: "OpenRouterModelId",
 	cline: "ClineModelId",
 	"cline-pass": "ClinePassModelId",
+	"openai-codex": "OpenAiCodexModelId",
 	openai: "OpenAiModelId",
 	ollama: "OllamaModelId",
 	lmstudio: "LmStudioModelId",

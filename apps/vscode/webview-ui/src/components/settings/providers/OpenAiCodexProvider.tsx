@@ -1,9 +1,9 @@
 import { openAiModelInfoSafeDefaults } from "@shared/api"
-import { fromProtobufModelInfo } from "@shared/proto-conversions/models/typeConversion"
 import type { Mode } from "@shared/storage/types"
 import { VSCodeButton } from "@vscode/webview-ui-toolkit/react"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useProviderConfig } from "@/hooks/useProviderConfig"
+import { useProviderModelSelection } from "@/hooks/useProviderModelSelection"
 import { useStaticProviderSelection } from "@/hooks/useStaticProviderSelection"
 import { AccountServiceClient } from "@/services/grpc-client"
 import { ModelInfoView } from "../common/ModelInfoView"
@@ -40,11 +40,17 @@ export const OpenAiCodexProvider = ({ showModelOptions, isPopup, currentMode }: 
 		selectedModelInfo: legacySelectedModelInfo,
 		hideUsageCost,
 	} = useStaticProviderSelection(OPENAI_CODEX_PROVIDER_ID, apiConfiguration, currentMode)
-	const committedSelection = currentMode === "plan" ? config?.planSelection : config?.actSelection
-	const selectedModelId = committedSelection?.modelId ?? legacySelectedModelId
-	const selectedModelInfo = committedSelection?.modelInfo
-		? fromProtobufModelInfo(committedSelection.modelInfo)
-		: legacySelectedModelInfo
+	const { selectedModelId, selectedModelInfo, commitModelSelection } = useProviderModelSelection(
+		OPENAI_CODEX_PROVIDER_ID,
+		currentMode,
+		{
+			models,
+			defaultModelId: defaultModelId || legacySelectedModelId,
+			config,
+			commitSelection,
+			fallbackModelInfo: legacySelectedModelInfo,
+		},
+	)
 
 	const showReasoningEffort = supportsReasoningEffortForModelId(selectedModelId, true)
 
@@ -56,8 +62,7 @@ export const OpenAiCodexProvider = ({ showModelOptions, isPopup, currentMode }: 
 		const fallbackModelId = defaultModelId || Object.keys(models)[0] || modelId
 		const modelInfo = models[modelId] ?? models[fallbackModelId] ?? selectedModelInfo ?? openAiModelInfoSafeDefaults
 
-		void commitSelection(currentMode, {
-			providerId: OPENAI_CODEX_PROVIDER_ID,
+		void commitModelSelection({
 			modelId,
 			modelInfo,
 		}).catch((err) => console.error("Failed to commit OpenAI Codex model selection:", err))

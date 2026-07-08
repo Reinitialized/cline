@@ -45,6 +45,11 @@ describe("Provider key mapping", () => {
 		expect(getProviderModelIdKey("cline-pass", "plan")).to.equal("planModeClinePassModelId")
 	})
 
+	it("uses separate model keys for OpenAI Codex subscription models", () => {
+		expect(getProviderModelIdKey("openai-codex", "act")).to.equal("actModeOpenAiCodexModelId")
+		expect(getProviderModelIdKey("openai-codex", "plan")).to.equal("planModeOpenAiCodexModelId")
+	})
+
 	it("uses the SDK-declared default for Nous Research through SDK-boundary casing", () => {
 		const expectedDefault = getProviderCollectionSync("nousResearch")?.provider.defaultModelId ?? ""
 		expect(getProviderDefaultModelId("nousResearch")).to.equal(expectedDefault)

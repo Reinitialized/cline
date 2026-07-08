@@ -182,6 +182,7 @@ const ApiOptions = ({
 		const selectedOption = providerOptions.find((option) => option.value === selectedProvider)
 		return selectedOption ? getProviderDisplayLabel(selectedOption) : selectedProvider
 	}, [getProviderDisplayLabel, providerOptions, selectedProvider])
+	const isOpenAISpecialProvider = selectedProvider === "openai-codex" || selectedProvider === "openai-native"
 
 	// Sync search term with current provider when not searching
 	useEffect(() => {
@@ -512,7 +513,7 @@ const ApiOptions = ({
 				<AIhubmixProvider currentMode={currentMode} isPopup={isPopup} showModelOptions={showModelOptions} />
 			)}
 
-			{apiConfiguration && (selectedProvider.includes("openai") || isCustomProvider) && (
+			{apiConfiguration && !isOpenAISpecialProvider && (selectedProvider.includes("openai") || isCustomProvider) && (
 				<OpenAICompatibleProvider
 					currentMode={currentMode}
 					isPopup={isPopup}
