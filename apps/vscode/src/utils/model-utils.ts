@@ -2,6 +2,8 @@ import { MODEL_COLLECTIONS_BY_PROVIDER_ID } from "@cline/llms"
 import { ApiHandlerModel } from "@core/api"
 import type { AnthropicModelId } from "@/shared/api"
 
+export { supportsReasoningEffortForModel } from "@/shared/utils/reasoning-support"
+
 const CLAUDE_VERSION_MATCH_REGEX = /[-_ ]([\d](?:\.[05])?)[-_ ]?/
 export const GEMINI_FLASH_MAX_OUTPUT_TOKENS = 8_192
 
@@ -147,6 +149,10 @@ export function isNextGenModelFamily(id: string): boolean {
 		isDeepSeekNativeModelFamily(modelId) ||
 		isPoolsideModelFamily(modelId)
 	)
+}
+
+export function isNativeToolCallingConfig(apiProviderInfo: { model: ApiHandlerModel }, nativeToolCallingEnabled: boolean): boolean {
+	return nativeToolCallingEnabled && isNextGenModelFamily(apiProviderInfo.model.id)
 }
 
 /**

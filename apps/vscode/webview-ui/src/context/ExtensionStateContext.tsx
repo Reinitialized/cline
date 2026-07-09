@@ -4,7 +4,7 @@ import { DEFAULT_PLATFORM, type ExtensionState } from "@shared/ExtensionMessage"
 import { DEFAULT_MCP_DISPLAY_MODE } from "@shared/McpDisplayMode"
 import type { UserInfo } from "@shared/proto/cline/account"
 import { EmptyRequest } from "@shared/proto/cline/common"
-import type { OpenRouterCompatibleModelInfo, ProviderModelsResponse } from "@shared/proto/cline/models"
+import { ResolveProviderModelsRequest, type OpenRouterCompatibleModelInfo, type ProviderModelsResponse } from "@shared/proto/cline/models"
 import { OnboardingModelGroup, type TerminalProfile } from "@shared/proto/cline/state"
 import { convertProtoToClineMessage } from "@shared/proto-conversions/cline-message"
 import { convertProtoMcpServersToMcpServers } from "@shared/proto-conversions/mcp/mcp-server-conversion"
@@ -47,6 +47,7 @@ export interface ExtensionStateContextType extends ExtensionState {
 	didHydrateState: boolean
 	showWelcome: boolean
 	onboardingModels: OnboardingModelGroup | undefined
+	clineModels: Record<string, ModelInfo>
 	openRouterModels: Record<string, ModelInfo>
 	vercelAiGatewayModels: Record<string, ModelInfo>
 	hicapModels: Record<string, ModelInfo>
@@ -106,6 +107,7 @@ export interface ExtensionStateContextType extends ExtensionState {
 
 	// Refresh functions
 	refreshOpenRouterModels: () => void
+	refreshClineModels: () => void
 	refreshVercelAiGatewayModels: () => void
 	refreshHicapModels: () => void
 	refreshLiteLlmModels: () => Promise<void>
@@ -331,6 +333,9 @@ export const ExtensionStateContextProvider: React.FC<{
 	const [onboardingModels, setOnboardingModels] = useState<OnboardingModelGroup | undefined>(undefined)
 
 	const [openRouterModels, setOpenRouterModels] = useState<Record<string, ModelInfo>>({
+		[openRouterDefaultModelId]: openRouterDefaultModelInfo,
+	})
+	const [clineModels, setClineModels] = useState<Record<string, ModelInfo>>({
 		[openRouterDefaultModelId]: openRouterDefaultModelInfo,
 	})
 	const [vercelAiGatewayModels, setVercelAiGatewayModels] = useState<Record<string, ModelInfo>>({})
@@ -806,6 +811,23 @@ export const ExtensionStateContextProvider: React.FC<{
 			.catch((error: Error) => console.error("Failed to refresh OpenRouter models:", error))
 	}, [])
 
+	const refreshClineModels = useCallback(() => {
+		const requestId = `cline-models-${Date.now()}`
+		ModelsServiceClient.resolveProviderModels(ResolveProviderModelsRequest.create({ providerId: "cline", forceRefresh: true, requestId }))
+			.then((response) => {
+				if (!response.ok) {
+					console.error("Failed to refresh Cline models:", response.error?.message)
+					return
+				}
+				const models = fromProtobufModels(response.models)
+				setClineModels({
+					[openRouterDefaultModelId]: openRouterDefaultModelInfo,
+					...models,
+				})
+			})
+			.catch((error: Error) => console.error("Failed to refresh Cline models:", error))
+	}, [])
+
 	const refreshHicapModels = useCallback(() => {
 		ModelsServiceClient.refreshHicapModels(EmptyRequest.create({}))
 			.then((response: OpenRouterCompatibleModelInfo) => {
@@ -875,6 +897,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		didHydrateState,
 		showWelcome,
 		onboardingModels,
+		clineModels,
 		openRouterModels,
 		vercelAiGatewayModels,
 		hicapModels,
@@ -932,6 +955,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		setOnboardingModels,
 		startProviderModelsRequest,
 		applyProviderModelsResponse,
+		refreshClineModels,
 		setShouldShowAnnouncement: (value) =>
 			setState((prevState) => ({
 				...prevState,

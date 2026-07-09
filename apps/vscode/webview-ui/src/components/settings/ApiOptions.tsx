@@ -48,7 +48,7 @@ import { VertexProvider } from "./providers/VertexProvider"
 import { VSCodeLmProvider } from "./providers/VSCodeLmProvider"
 import { XaiProvider } from "./providers/XaiProvider"
 import { ZAiProvider } from "./providers/ZAiProvider"
-import { getModeSpecificFields } from "./utils/providerUtils"
+import { normalizeApiConfiguration } from "./utils/providerUtils"
 import { useApiConfigurationHandlers } from "./utils/useApiConfigurationHandlers"
 
 interface ApiOptionsProps {
@@ -175,7 +175,7 @@ const ApiOptions = ({
 		return providers
 	}, [catalogProviderListings, remoteConfigSettings])
 
-	const getProviderDisplayLabel = useCallback((option: (typeof PROVIDERS.list)[number]) => {
+	const getProviderDisplayLabel = useCallback((option: (typeof providerOptions)[number]) => {
 		return option.value === "cline" ? "Cline Usage-Billing" : option.label
 	}, [])
 

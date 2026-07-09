@@ -1373,6 +1373,8 @@ export class TelemetryService {
 		provider?: string
 		errorStatus?: number | undefined
 		requestId?: string | undefined
+		errorType?: string | undefined
+		failurePhase?: string | undefined
 		isNativeToolCall?: boolean
 	}) {
 		this.capture({
@@ -1398,6 +1400,44 @@ export class TelemetryService {
 		}
 		const errorCount = this.incrementTaskCounter(this.taskErrorCounts, args.ulid)
 		this.recordHistogram(TelemetryService.METRICS.ERRORS.PER_TASK, errorCount, errorAttributes)
+	}
+
+	public captureNewTaskClicked(source?: string, hasActiveTask?: boolean) {
+		this.capture({
+			event: TelemetryService.EVENTS.UI.BUTTON_CLICKED,
+			properties: {
+				button: "new_task",
+				source,
+				hasActiveTask,
+			},
+		})
+	}
+
+	public capturePromptSubmitted(args: {
+		source?: string
+		hasText?: boolean
+		hasImages?: boolean
+		hasFiles?: boolean
+		hasActiveTask?: boolean
+		textLength?: number
+	}) {
+		this.capture({
+			event: TelemetryService.EVENTS.UI.BUTTON_CLICKED,
+			properties: {
+				button: "prompt_submitted",
+				...args,
+			},
+		})
+	}
+
+	public capturePanelOpened(source?: string) {
+		this.capture({
+			event: TelemetryService.EVENTS.UI.BUTTON_CLICKED,
+			properties: {
+				button: "panel_opened",
+				source,
+			},
+		})
 	}
 
 	/**
@@ -2117,10 +2157,41 @@ export class TelemetryService {
 		})
 	}
 
-	public captureOnboardingProgress(args: { step: number; action?: string; model?: string; completed?: boolean }) {
+	public captureOnboardingProgress(args: {
+		step: number
+		action?: string
+		model?: string
+		completed?: boolean
+		page?: string
+		pageVariant?: string
+		userType?: string
+		selectedModelId?: string
+		destinationStep?: number
+		destinationPage?: string
+	}) {
 		this.capture({
 			event: TelemetryService.EVENTS.USER.ONBOARDING_PROGRESS,
 			properties: {
+				...args,
+			},
+		})
+	}
+
+	public captureLegacyTaskMigration(args: Record<string, unknown>) {
+		this.capture({
+			event: TelemetryService.EVENTS.TASK.HISTORICAL_LOADED,
+			properties: {
+				migration: "legacy_task",
+				...args,
+			},
+		})
+	}
+
+	public captureLegacyTaskMigrationBacklog(args: Record<string, unknown>) {
+		this.capture({
+			event: TelemetryService.EVENTS.TASK.HISTORICAL_LOADED,
+			properties: {
+				migration: "legacy_task_backlog",
 				...args,
 			},
 		})

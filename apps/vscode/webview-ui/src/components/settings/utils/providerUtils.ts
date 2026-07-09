@@ -1,4 +1,19 @@
-import type { ApiConfiguration, ApiProvider, ModelInfo } from "@shared/api"
+import {
+	anthropicDefaultModelId,
+	anthropicModels,
+	bedrockDefaultModelId,
+	bedrockModels,
+	DEFAULT_API_PROVIDER,
+	openAiModelInfoSafeDefaults,
+	openRouterDefaultModelId,
+	openRouterDefaultModelInfo,
+	resolveClinePassModelInfo,
+	type ApiConfiguration,
+	type ApiProvider,
+	type ModelInfo,
+	vertexDefaultModelId,
+	vertexModels,
+} from "@shared/api"
 import type { Mode } from "@shared/storage/types"
 import * as reasoningSupport from "@shared/utils/reasoning-support"
 
@@ -20,6 +35,159 @@ export interface NormalizedApiConfig {
 	selectedProvider: ApiProvider
 	selectedModelId: string
 	selectedModelInfo: ModelInfo
+}
+
+interface NormalizeApiConfigurationOptions {
+	isClinePassEnabled?: boolean
+	clinePassModelInfoByName?: Record<string, ModelInfo>
+}
+
+function resolveKnownModel(
+	modelId: string | undefined,
+	models: Record<string, ModelInfo>,
+	defaultModelId: string,
+	fallbackInfo: ModelInfo = openAiModelInfoSafeDefaults,
+) {
+	const selectedModelId = modelId || defaultModelId
+	return {
+		selectedModelId,
+		selectedModelInfo: models[selectedModelId] ?? models[defaultModelId] ?? fallbackInfo,
+	}
+}
+
+/**
+ * Normalizes the selected provider/model for legacy settings components.
+ * New provider-specific components should prefer the dedicated selection hooks,
+ * but these shared pickers still need a small compatibility surface.
+ */
+export function normalizeApiConfiguration(
+	apiConfiguration: ApiConfiguration | undefined,
+	mode: Mode = "act",
+	options: NormalizeApiConfigurationOptions = {},
+): NormalizedApiConfig {
+	const modeFields = getModeSpecificFields(apiConfiguration, mode)
+	const selectedProvider = (modeFields.apiProvider || DEFAULT_API_PROVIDER) as ApiProvider
+
+	switch (selectedProvider) {
+		case "anthropic": {
+			return { selectedProvider, ...resolveKnownModel(modeFields.apiModelId, anthropicModels, anthropicDefaultModelId) }
+		}
+		case "bedrock": {
+			return { selectedProvider, ...resolveKnownModel(modeFields.apiModelId, bedrockModels, bedrockDefaultModelId) }
+		}
+		case "vertex": {
+			return { selectedProvider, ...resolveKnownModel(modeFields.apiModelId, vertexModels, vertexDefaultModelId) }
+		}
+		case "openrouter": {
+			return {
+				selectedProvider,
+				...resolveKnownModel(
+					modeFields.openRouterModelId,
+					modeFields.openRouterModelInfo ? { [modeFields.openRouterModelId || ""]: modeFields.openRouterModelInfo } : {},
+					openRouterDefaultModelId,
+					modeFields.openRouterModelInfo ?? openRouterDefaultModelInfo,
+				),
+			}
+		}
+		case "cline": {
+			const selectedModelId = modeFields.clineModelId || openRouterDefaultModelId
+			return {
+				selectedProvider,
+				selectedModelId,
+				selectedModelInfo: modeFields.clineModelInfo ?? openRouterDefaultModelInfo,
+			}
+		}
+		case "cline-pass": {
+			const selectedModelId = modeFields.clinePassModelId || ""
+			const modelInfoByName = options.clinePassModelInfoByName ?? {}
+			return {
+				selectedProvider,
+				selectedModelId,
+				selectedModelInfo:
+					modeFields.clinePassModelInfo ??
+					(selectedModelId ? resolveClinePassModelInfo(selectedModelId, modelInfoByName) : openAiModelInfoSafeDefaults),
+			}
+		}
+		case "openai": {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.openAiModelId || "",
+				selectedModelInfo: modeFields.openAiModelInfo ?? openAiModelInfoSafeDefaults,
+			}
+		}
+		case "requesty": {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.requestyModelId || "",
+				selectedModelInfo: modeFields.requestyModelInfo ?? openAiModelInfoSafeDefaults,
+			}
+		}
+		case "litellm": {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.liteLlmModelId || "",
+				selectedModelInfo: modeFields.liteLlmModelInfo ?? openAiModelInfoSafeDefaults,
+			}
+		}
+		case "groq": {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.groqModelId || "",
+				selectedModelInfo: modeFields.groqModelInfo ?? openAiModelInfoSafeDefaults,
+			}
+		}
+		case "baseten": {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.basetenModelId || "",
+				selectedModelInfo: modeFields.basetenModelInfo ?? openAiModelInfoSafeDefaults,
+			}
+		}
+		case "huggingface": {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.huggingFaceModelId || "",
+				selectedModelInfo: modeFields.huggingFaceModelInfo ?? openAiModelInfoSafeDefaults,
+			}
+		}
+		case "aihubmix": {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.aihubmixModelId || "",
+				selectedModelInfo: modeFields.aihubmixModelInfo ?? openAiModelInfoSafeDefaults,
+			}
+		}
+		case "oca": {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.ocaModelId || "",
+				selectedModelInfo: modeFields.ocaModelInfo ?? openAiModelInfoSafeDefaults,
+			}
+		}
+		case "huawei-cloud-maas": {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.huaweiCloudMaasModelId || "",
+				selectedModelInfo: modeFields.huaweiCloudMaasModelInfo ?? openAiModelInfoSafeDefaults,
+			}
+		}
+		case "vscode-lm": {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.vsCodeLmModelSelector
+					? `${modeFields.vsCodeLmModelSelector.vendor}/${modeFields.vsCodeLmModelSelector.family}`
+					: "",
+				selectedModelInfo: openAiModelInfoSafeDefaults,
+			}
+		}
+		default: {
+			return {
+				selectedProvider,
+				selectedModelId: modeFields.apiModelId || "",
+				selectedModelInfo: openAiModelInfoSafeDefaults,
+			}
+		}
+	}
 }
 
 /**

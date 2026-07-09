@@ -16,6 +16,7 @@ import { OnboardingModelGroup } from "./proto/cline/state"
 import { Mode } from "./storage/types"
 import { TelemetrySetting } from "./TelemetrySetting"
 import { UserInfo } from "./UserInfo"
+import { FocusChainSettings } from "./FocusChainSettings"
 // webview will hold state
 export interface ExtensionMessage {
 	type: "grpc_response" // New type for gRPC responses
@@ -45,6 +46,7 @@ export interface ExtensionState {
 	remoteBrowserHost?: string
 	preferredLanguage?: string
 	mode: Mode
+	focusChainSettings?: FocusChainSettings
 	clineMessages: ClineMessage[]
 	checkpointRestoreInput?: {
 		text: string

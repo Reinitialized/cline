@@ -58,7 +58,7 @@ export function useOnboardingModels(): UseOnboardingModelsResult {
 			try {
 				const response = await ModelsServiceClient.refreshClineRecommendedModelsRpc(EmptyRequest.create({}))
 				if (!cancelled) {
-					const data = getRecommendedModelsData(response, true)
+					const data = getRecommendedModelsData(response)
 					if (!data) {
 						setFetchState({ status: "empty" })
 					} else {

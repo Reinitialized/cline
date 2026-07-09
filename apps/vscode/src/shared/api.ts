@@ -33,18 +33,24 @@ export type ApiProvider =
 	| "cerebras"
 	| "sapaicore"
 	| "groq"
+	| "poolside"
 	| "huggingface"
 	| "huawei-cloud-maas"
 	| "dify"
 	| "baseten"
 	| "vercel-ai-gateway"
+	| "v0"
 	| "zai"
+	| "zai-coding-plan"
 	| "oca"
 	| "aihubmix"
 	| "minimax"
 	| "hicap"
 	| "nousResearch"
 	| "wandb"
+	| "xiaomi"
+	| "tencent-tokenhub"
+	| "cline-pass"
 
 export const DEFAULT_API_PROVIDER = "openrouter" as ApiProvider
 
@@ -1813,6 +1819,9 @@ export const openAiModelInfoSaneDefaults: OpenAiCompatibleModelInfo = {
 	outputPrice: 0,
 	temperature: 0,
 }
+
+// Backwards-compatible alias for call sites that use the clearer "safe defaults" name.
+export const openAiModelInfoSafeDefaults = openAiModelInfoSaneDefaults
 
 // Gemini
 // https://ai.google.dev/gemini-api/docs/models/gemini
