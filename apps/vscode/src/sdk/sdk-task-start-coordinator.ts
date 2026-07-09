@@ -45,6 +45,7 @@ export interface SdkTaskStartCoordinatorOptions {
 	createHistoryItemFromSession: (sessionId: string, prompt: string, modelId?: string, cwd?: string) => HistoryItem
 	clearTask: () => Promise<void>
 	setTask: (task: TaskProxy | undefined) => void
+	registerTask?: (task: TaskProxy) => void
 	onAskResponse: (text?: string, images?: string[], files?: string[]) => Promise<void>
 	onCancelTask: () => Promise<void>
 	getWorkspaceRoot: () => Promise<string>
@@ -129,6 +130,7 @@ export class SdkTaskStartCoordinator {
 				)
 				task.taskId = startResult.sessionId
 				taskSessionId = startResult.sessionId
+				this.options.registerTask?.(task)
 			}
 
 			const newHistoryItem = this.options.createHistoryItemFromSession(
@@ -212,6 +214,7 @@ export class SdkTaskStartCoordinator {
 			(text?: string, images?: string[], files?: string[]) => this.options.onAskResponse(text, images, files),
 			() => this.options.onCancelTask(),
 		)
+		this.options.registerTask?.(task)
 		this.options.setTask(task)
 		return task
 	}

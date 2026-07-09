@@ -80,7 +80,7 @@ describe("SdkSessionLifecycle", () => {
 		expect(lifecycle.getActiveSession()?.sessionId).toBe("session-2")
 	})
 
-	it("replaces an existing active session before starting another without resubscribing", async () => {
+	it("starts another session without stopping the previous one and selects the new session", async () => {
 		const unsubscribe = vi.fn()
 		const sdkHost = makeSdkHost({
 			start: vi.fn().mockResolvedValueOnce({ sessionId: "session-1" }).mockResolvedValueOnce({ sessionId: "session-2" }),
@@ -96,12 +96,16 @@ describe("SdkSessionLifecycle", () => {
 
 		expect(mockCreateSessionHost).toHaveBeenCalledOnce()
 		expect(sdkHost.subscribe).toHaveBeenCalledOnce()
-		expect(sdkHost.stop).toHaveBeenCalledWith("session-1")
+		expect(sdkHost.stop).not.toHaveBeenCalled()
 		expect(unsubscribe).not.toHaveBeenCalled()
 		expect(lifecycle.getActiveSession()?.sessionId).toBe("session-2")
+		expect(lifecycle.getSession("session-1")?.isRunning).toBe(true)
+		expect(lifecycle.getSession("session-2")?.isRunning).toBe(true)
 
 		await lifecycle.dispose("testDispose")
 		expect(unsubscribe).toHaveBeenCalledOnce()
+		expect(sdkHost.stop).toHaveBeenCalledWith("session-1")
+		expect(sdkHost.stop).toHaveBeenCalledWith("session-2")
 	})
 
 	it("unsubscribes if session start fails", async () => {

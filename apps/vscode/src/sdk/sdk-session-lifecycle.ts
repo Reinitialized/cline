@@ -35,7 +35,8 @@ export interface SdkSessionLifecycleOptions {
 }
 
 export class SdkSessionLifecycle {
-	private activeSession: ActiveSession | undefined
+	private readonly sessions = new Map<string, ActiveSession>()
+	private selectedSessionId: string | undefined
 	private sharedHost: SdkSessionHost | undefined
 	private sharedHostPromise: Promise<SdkSessionHost> | undefined
 	private sharedHostUnsubscribe: (() => void) | undefined
@@ -52,19 +53,75 @@ export class SdkSessionLifecycle {
 	constructor(private readonly options: SdkSessionLifecycleOptions) {}
 
 	getActiveSession(): ActiveSession | undefined {
-		return this.activeSession
+		return this.selectedSessionId ? this.sessions.get(this.selectedSessionId) : undefined
 	}
 
-	setRunning(isRunning: boolean): void {
-		if (this.activeSession) {
-			this.activeSession.isRunning = isRunning
+	getSession(sessionId: string | undefined): ActiveSession | undefined {
+		return sessionId ? this.sessions.get(sessionId) : undefined
+	}
+
+	selectSession(sessionId: string | undefined): void {
+		if (!sessionId) {
+			this.selectedSessionId = undefined
+			return
+		}
+		if (this.sessions.has(sessionId)) {
+			this.selectedSessionId = sessionId
+		}
+	}
+
+	getSelectedSessionId(): string | undefined {
+		return this.selectedSessionId
+	}
+
+	getSessions(): ActiveSession[] {
+		return [...this.sessions.values()]
+	}
+
+	setRunning(isRunning: boolean, sessionId = this.selectedSessionId): void {
+		const session = this.getSession(sessionId)
+		if (session) {
+			session.isRunning = isRunning
 		}
 	}
 
 	private clearActiveSessionReference(): ActiveSession | undefined {
-		const activeSession = this.activeSession
-		this.activeSession = undefined
+		const activeSession = this.getActiveSession()
+		if (activeSession) {
+			this.sessions.delete(activeSession.sessionId)
+		}
+		this.selectedSessionId = undefined
 		return activeSession
+	}
+
+	async endSession(
+		sessionId: string,
+		reason: string,
+		options: { awaitStop?: boolean; timeoutMs?: number } = {},
+	): Promise<ActiveSession | undefined> {
+		const session = this.sessions.get(sessionId)
+		if (!session) {
+			return undefined
+		}
+
+		this.sessions.delete(sessionId)
+		if (this.selectedSessionId === sessionId) {
+			this.selectedSessionId = undefined
+		}
+
+		this.safeUnsubscribe(session, reason)
+		const stopPromise = this.trackSessionStop(session.sdkHost, session.sessionId, reason)
+		if (options.awaitStop) {
+			const timeoutMs = options.timeoutMs ?? 3000
+			const stopped = await this.waitForStop(stopPromise, timeoutMs)
+			if (!stopped) {
+				Logger.warn(
+					`[SdkController] Timed out stopping SDK session ${session.sessionId} after ${timeoutMs}ms (${reason})`,
+				)
+			}
+		}
+
+		return session
 	}
 
 	async endActiveSession(
@@ -91,7 +148,7 @@ export class SdkSessionLifecycle {
 	}
 
 	async updateActiveSessionModel(modelId: string): Promise<boolean> {
-		const activeSession = this.activeSession
+		const activeSession = this.getActiveSession()
 		if (!activeSession?.sdkHost.updateSessionModel) {
 			return false
 		}
@@ -103,10 +160,6 @@ export class SdkSessionLifecycle {
 	async startNewSession(
 		startInput: Parameters<VscodeSessionHost["start"]>[0],
 	): Promise<{ startResult: StartSessionResult; sdkHost: SdkSessionHost }> {
-		if (this.activeSession) {
-			await this.endActiveSession("startNewSession")
-		}
-
 		// Same-id starts must wait for the previous session's stop to finish;
 		// see pendingStops. A fresh id cannot conflict, so it never waits.
 		const requestedSessionId = startInput.config?.sessionId?.trim()
@@ -125,7 +178,7 @@ export class SdkSessionLifecycle {
 			...startInput,
 			...(toolPolicies ? { toolPolicies } : {}),
 		})
-		this.activeSession = {
+		const activeSession: ActiveSession = {
 			sessionId: startResult.sessionId,
 			startConfig: startInput.config
 				? {
@@ -138,6 +191,8 @@ export class SdkSessionLifecycle {
 			startResult,
 			isRunning: true,
 		}
+		this.sessions.set(startResult.sessionId, activeSession)
+		this.selectedSessionId = startResult.sessionId
 
 		return { startResult, sdkHost }
 	}
@@ -154,7 +209,7 @@ export class SdkSessionLifecycle {
 		  }
 		| undefined
 	> {
-		const oldSession = this.activeSession
+		const oldSession = this.getActiveSession()
 		if (!oldSession) {
 			return undefined
 		}
@@ -175,7 +230,7 @@ export class SdkSessionLifecycle {
 	}
 
 	async restoreActiveSession(input: RestoreInput): Promise<RestoreResult> {
-		const activeSession = this.activeSession
+		const activeSession = this.getActiveSession()
 		if (!activeSession) {
 			throw new Error("No active SDK session to restore")
 		}
@@ -186,7 +241,7 @@ export class SdkSessionLifecycle {
 			return restored
 		}
 
-		this.activeSession = {
+		const restoredSession: ActiveSession = {
 			...activeSession,
 			sessionId: restored.sessionId,
 			startConfig: input.start?.config
@@ -198,6 +253,9 @@ export class SdkSessionLifecycle {
 			startResult: restored.startResult,
 			isRunning: false,
 		}
+		this.sessions.delete(sourceSessionId)
+		this.sessions.set(restored.sessionId, restoredSession)
+		this.selectedSessionId = restored.sessionId
 
 		if (restored.sessionId !== sourceSessionId) {
 			const stopPromise = this.trackSessionStop(activeSession.sdkHost, sourceSessionId, "restoreActiveSession")
@@ -210,7 +268,8 @@ export class SdkSessionLifecycle {
 	}
 
 	async dispose(reason = "SdkSessionLifecycle.dispose"): Promise<void> {
-		await this.endActiveSession(reason, { awaitStop: true })
+		const sessionIds = [...this.sessions.keys()]
+		await Promise.all(sessionIds.map((sessionId) => this.endSession(sessionId, reason, { awaitStop: true })))
 
 		const sharedHost = this.sharedHost ?? (await this.sharedHostPromise?.catch(() => undefined))
 		this.sharedHost = undefined
@@ -329,9 +388,9 @@ export class SdkSessionLifecycle {
 		// must not run bookkeeping against the successor (e.g. flipping a live
 		// auto-continued run to isRunning=false, which makes the event coordinator
 		// treat the new turn's completion as a cancelled-turn straggler).
-		const sessionAtSend = this.activeSession
+		const sessionAtSend = this.getSession(sessionId)
 		const isSuperseded = (label: string): boolean => {
-			if (this.activeSession === sessionAtSend) {
+			if (this.getSession(sessionId) === sessionAtSend) {
 				return false
 			}
 			Logger.debug(`[SdkController] Ignoring ${label} of superseded send for session: ${sessionId}`)
@@ -355,7 +414,7 @@ export class SdkSessionLifecycle {
 					return
 				}
 				Logger.log(`[SdkController] Agent turn completed for session: ${sessionId}`)
-				this.setRunning(false)
+				this.setRunning(false, sessionId)
 				await this.options.onSendComplete(sessionId)
 			})
 			.catch(async (error: unknown) => {
@@ -367,7 +426,7 @@ export class SdkSessionLifecycle {
 					return
 				}
 				Logger.error("[SdkController] Agent turn failed:", error)
-				this.setRunning(false)
+				this.setRunning(false, sessionId)
 				await this.options.onSendError(error, sessionId)
 			})
 	}

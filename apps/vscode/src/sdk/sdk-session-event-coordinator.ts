@@ -4,8 +4,8 @@ import type { StateManager } from "@/core/storage/StateManager"
 import { CLINE_RECOMMENDED_MODELS_FALLBACK } from "@/shared/cline/recommended-models"
 import type { ClineApiReqInfo, TurnPhase } from "@/shared/ExtensionMessage"
 import { Logger } from "@/shared/services/Logger"
-import type { MessageTranslatorState, TranslationResult } from "./message-translator"
-import { translateSessionEvent } from "./message-translator"
+import type { TranslationResult } from "./message-translator"
+import { MessageTranslatorState, translateSessionEvent } from "./message-translator"
 import { PROVIDER_FAILURE_ERROR_TYPE, PROVIDER_FAILURE_PHASE, type ProviderFailureTelemetry } from "./provider-failure-telemetry"
 import type { SdkMcpCoordinator } from "./sdk-mcp-coordinator"
 import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
@@ -46,31 +46,43 @@ export interface SdkSessionEventCoordinatorOptions {
 
 export class SdkSessionEventCoordinator {
 	private readonly translateSessionEvent: (event: CoreSessionEvent, state: MessageTranslatorState) => TranslationResult
+	private readonly translatorStates = new Map<string, MessageTranslatorState>()
 
 	constructor(private readonly options: SdkSessionEventCoordinatorOptions) {
 		this.translateSessionEvent = options.translateSessionEvent ?? translateSessionEvent
 	}
 
+	private getTranslatorState(sessionId: string): MessageTranslatorState {
+		let state = this.translatorStates.get(sessionId)
+		if (!state) {
+			state = this.options.sessions.getSelectedSessionId() === sessionId ? this.options.messageTranslatorState : new MessageTranslatorState()
+			this.translatorStates.set(sessionId, state)
+		}
+		return state
+	}
+
 	async handleSessionEvent(event: CoreSessionEvent): Promise<void> {
 		this.logQueueEvents(event)
 
-		const activeSession = this.options.sessions.getActiveSession()
-		if (!activeSession || event.payload.sessionId !== activeSession.sessionId) {
+		const session = this.options.sessions.getSession(event.payload.sessionId)
+		if (!session) {
 			Logger.debug(
-				`[SdkController] Ignoring stale SDK event for session ${event.payload.sessionId}; active=${activeSession?.sessionId ?? "none"}`,
+				`[SdkController] Ignoring stale SDK event for session ${event.payload.sessionId}; active=${this.options.sessions.getActiveSession()?.sessionId ?? "none"}`,
 			)
 			return
 		}
+		const isSelectedSession = this.options.sessions.getSelectedSessionId() === event.payload.sessionId
+		const translatorState = this.getTranslatorState(event.payload.sessionId)
 
-		if (event.type === "pending_prompts") {
+		if (event.type === "pending_prompts" && isSelectedSession) {
 			this.options.postStateToWebview().catch((err) => {
 				Logger.error("[SdkController] Failed to post pending-prompt state update:", err)
 			})
 		}
 
-		const result = this.translateSessionEvent(event, this.options.messageTranslatorState)
+		const result = this.translateSessionEvent(event, translatorState)
 		const agentFailure = this.getAgentFailureTelemetry(event)
-		if (agentFailure && !this.options.messageTranslatorState.isSuppressedToolApprovalDenial(agentFailure.error)) {
+		if (agentFailure && !translatorState.isSuppressedToolApprovalDenial(agentFailure.error)) {
 			this.options.captureProviderApiError?.({
 				sessionId: agentFailure.sessionId,
 				error: agentFailure.error,
@@ -79,17 +91,19 @@ export class SdkSessionEventCoordinator {
 			})
 		}
 		if (event.type === "pending_prompt_submitted") {
-			this.options.beginProviderFailureTelemetryTurn?.()
-			this.options.messageTranslatorState.clearTurnOutcome()
-			this.options.sessions.setRunning(true)
-			this.options.setTurnPhase?.(PROVIDER_FAILURE_PHASE.STREAMING)
+			if (isSelectedSession) {
+				this.options.beginProviderFailureTelemetryTurn?.()
+				this.options.setTurnPhase?.(PROVIDER_FAILURE_PHASE.STREAMING)
+			}
+			translatorState.clearTurnOutcome()
+			this.options.sessions.setRunning(true, event.payload.sessionId)
 		}
 		const zeroCostPromise = this.zeroCostForFreeClineModel(result)
 		if (zeroCostPromise) {
 			await zeroCostPromise
 		}
 
-		if (!activeSession.isRunning && result.messages.length > 0) {
+		if (!session.isRunning && result.messages.length > 0) {
 			result.messages = result.messages.filter(
 				(m) => !(m.type === "ask" && (m.ask === "completion_result" || m.ask === "resume_completed_task")),
 			)
@@ -99,7 +113,7 @@ export class SdkSessionEventCoordinator {
 			this.options.messages.appendAndEmit(result.messages, event)
 		}
 
-		if (activeSession) {
+		if (session) {
 			if (result.sessionEnded || result.turnComplete) {
 				// Authoritative UI phase at turn end. If the completion tool was used this turn
 				// the phase is "completed" (green box + Start New Task); otherwise the agent
@@ -111,32 +125,34 @@ export class SdkSessionEventCoordinator {
 				// "resumable" and aborted). Overwriting it here would clobber "resumable" with
 				// "awaiting_followup"/"completed" and the footer would lose the Resume Task button
 				// (showing the scroll-arrow default instead), so the cancel-set phase is preserved.
-				if (!activeSession.isRunning) {
+				if (!session.isRunning) {
 					Logger.debug("[SdkController] turn-complete straggler after cancel; preserving resumable phase")
-				} else if (this.options.messageTranslatorState.wasAttemptCompletionSeen()) {
+				} else if (isSelectedSession && translatorState.wasAttemptCompletionSeen()) {
 					this.options.setTurnPhase?.("completed")
-				} else {
+				} else if (isSelectedSession) {
 					this.options.setTurnPhase?.("awaiting_followup")
 				}
 
-				this.options.sessions.setRunning(false)
-				this.options.mcpTools.checkDeferredRestart()
+				this.options.sessions.setRunning(false, event.payload.sessionId)
+				if (isSelectedSession) {
+					this.options.mcpTools.checkDeferredRestart()
+				}
 
-				if (this.options.providerChanges) {
+				if (isSelectedSession && this.options.providerChanges) {
 					this.options.providerChanges.handleTurnComplete(this.options.mode).catch((err) => {
 						Logger.error("[SdkController] Failed to process deferred provider restart:", err)
 					})
-				} else if (this.options.mode.hasPendingModeChange()) {
+				} else if (isSelectedSession && this.options.mode.hasPendingModeChange()) {
 					this.options.mode.applyPendingModeChange().catch((err) => {
 						Logger.error("[SdkController] applyPendingModeChange failed:", err)
 					})
 				}
 			}
 
-			if (result.usage && activeSession.startResult) {
+			if (result.usage && session.startResult) {
 				Promise.resolve(
 					this.options.taskHistory.updateTaskUsage(
-						this.options.getTask()?.taskId ?? this.options.sessions.getActiveSession()?.sessionId,
+						event.payload.sessionId,
 						result.usage,
 					),
 				).catch((error) => {
@@ -150,12 +166,12 @@ export class SdkSessionEventCoordinator {
 		// completed/awaiting_followup/error above; without posting here the webview would stay on
 		// the prior phase (footer stuck on the streaming/scroll state). The webview reducer gates
 		// turnState by seq, so an extra no-message post is safe.
-		if (
+		if (isSelectedSession && (
 			result.messages.length > 0 ||
 			result.sessionEnded ||
 			result.turnComplete ||
 			event.type === "pending_prompt_submitted"
-		) {
+		)) {
 			this.options.postStateToWebview().catch((err) => {
 				Logger.error("[SdkController] Failed to post state after event:", err)
 			})

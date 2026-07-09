@@ -51,6 +51,27 @@ describe("SdkMessageCoordinator", () => {
 		expect(listener).toHaveBeenCalledWith(messages, event)
 	})
 
+	it("routes messages to the task matching the event session id", () => {
+		const selectedTask = createTaskProxy("selected", vi.fn(), vi.fn())
+		const backgroundTask = createTaskProxy("background", vi.fn(), vi.fn())
+		const coordinator = new SdkMessageCoordinator({
+			getTask: () => selectedTask,
+			getTaskBySessionId: (sessionId) => (sessionId === "background" ? backgroundTask : selectedTask),
+			isSelectedSession: (sessionId) => sessionId === "selected",
+		})
+		const listener = vi.fn()
+		const event = { type: "status", payload: { sessionId: "background", status: "running" } }
+		const messages = [{ ts: 1, type: "say" as const, say: "text" as const, text: "background", partial: true }]
+
+		coordinator.onSessionEvent(listener)
+		// biome-ignore lint/suspicious/noExplicitAny: test-only event shape
+		coordinator.appendAndEmit(messages, event as any)
+
+		expect(backgroundTask.messageStateHandler.getClineMessages()).toEqual(messages)
+		expect(selectedTask.messageStateHandler.getClineMessages()).toEqual([])
+		expect(listener).not.toHaveBeenCalled()
+	})
+
 	it("finalizes partial messages and marks the last open API request as cancelled", () => {
 		const coordinator = new SdkMessageCoordinator({ getTask: () => undefined })
 		const finalized = coordinator.finalizeMessagesForSave([

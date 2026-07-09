@@ -12,7 +12,9 @@ export interface SdkTaskControlCoordinatorOptions {
 	messages: SdkMessageCoordinator
 	taskHistory: SdkTaskHistory
 	getTask: () => TaskProxy | undefined
+	getTaskById?: (taskId: string) => TaskProxy | undefined
 	setTask: (task: TaskProxy | undefined) => void
+	unregisterTask?: (taskId: string) => void
 	onAskResponse: (text?: string, images?: string[], files?: string[]) => Promise<void>
 	resetMessageTranslator: () => void
 	postStateToWebview: () => Promise<void>
@@ -56,7 +58,7 @@ export class SdkTaskControlCoordinator {
 			}
 		}
 
-		this.options.sessions.setRunning(false)
+		this.options.sessions.setRunning(false, sessionId)
 
 		const resumeMessage: ClineMessage = {
 			ts: Date.now(),
@@ -74,14 +76,19 @@ export class SdkTaskControlCoordinator {
 	async clearTask(): Promise<void> {
 		this.options.interactions.clearPending("Task cleared")
 
-		await this.options.sessions.endActiveSession("clearTask")
-
 		const task = this.options.getTask()
+		if (task) {
+			await this.options.sessions.endSession(task.taskId, "clearTask")
+		} else {
+			await this.options.sessions.endActiveSession("clearTask")
+		}
+
 		if (task) {
 			// SDK session persistence owns conversation history. Do not write classic
 			// ui_messages.json here; history viewing reloads from SDK readMessages().
 			this.options.messages.cancelPendingSave()
 			task.messageStateHandler.clear()
+			this.options.unregisterTask?.(task.taskId)
 			this.options.setTask(undefined)
 		}
 
@@ -98,11 +105,13 @@ export class SdkTaskControlCoordinator {
 				}
 			}
 
-			await this.options.sessions.endActiveSession("showTaskWithId")
-
-			const currentTask = this.options.getTask()
-			if (currentTask) {
-				currentTask.messageStateHandler.clear()
+			const runningTask = this.options.getTaskById?.(taskId)
+			if (runningTask) {
+				this.options.sessions.selectSession(taskId)
+				this.options.setTask(runningTask)
+				await this.options.postStateToWebview()
+				Logger.log(`[SdkController] Showing running task: ${taskId}`)
+				return
 			}
 
 			this.options.resetMessageTranslator()

@@ -75,6 +75,31 @@ describe("SdkSessionEventCoordinator", () => {
 		expect(options.postStateToWebview).not.toHaveBeenCalled()
 	})
 
+	it("processes events for a known background session without posting selected UI state", async () => {
+		const message: ClineMessage = { ts: 1, type: "say", say: "text", text: "background" }
+		const backgroundSession = makeActiveSession({ sessionId: "background" })
+		const { coordinator, options } = makeCoordinator({
+			translation: {
+				messages: [message],
+				sessionEnded: false,
+				turnComplete: false,
+			},
+		})
+		options.sessions.getSession.mockImplementation((sessionId: string) =>
+			sessionId === "background" ? backgroundSession : undefined,
+		)
+		const backgroundEvent = {
+			type: "agent_event",
+			payload: { sessionId: "background", event: { type: "done", success: true } },
+		} as unknown as CoreSessionEvent
+
+		await coordinator.handleSessionEvent(backgroundEvent)
+
+		expect(options.translateSessionEvent).toHaveBeenCalled()
+		expect(options.messages.appendAndEmit).toHaveBeenCalledWith([message], backgroundEvent)
+		expect(options.postStateToWebview).not.toHaveBeenCalled()
+	})
+
 	it("marks turns complete and delegates provider restart handling", async () => {
 		const activeSession = makeActiveSession()
 		const { coordinator, options, event } = makeCoordinator({
@@ -88,7 +113,7 @@ describe("SdkSessionEventCoordinator", () => {
 
 		await coordinator.handleSessionEvent(event)
 
-		expect(options.sessions.setRunning).toHaveBeenCalledWith(false)
+		expect(options.sessions.setRunning).toHaveBeenCalledWith(false, "session-123")
 		expect(options.mcpTools.checkDeferredRestart).toHaveBeenCalledOnce()
 		expect(options.providerChanges.handleTurnComplete).toHaveBeenCalledWith(options.mode)
 	})
@@ -137,7 +162,7 @@ describe("SdkSessionEventCoordinator", () => {
 
 		expect(clearTurnOutcome).toHaveBeenCalledOnce()
 		expect(options.beginProviderFailureTelemetryTurn).toHaveBeenCalledOnce()
-		expect(options.sessions.setRunning).toHaveBeenCalledWith(true)
+		expect(options.sessions.setRunning).toHaveBeenCalledWith(true, "session-123")
 		expect(options.setTurnPhase).toHaveBeenCalledWith("streaming")
 		expect(options.messages.appendAndEmit).toHaveBeenCalledWith([message], event)
 		expect(options.postStateToWebview).toHaveBeenCalledOnce()
@@ -201,7 +226,7 @@ describe("SdkSessionEventCoordinator", () => {
 
 		await coordinator.handleSessionEvent(event)
 
-		expect(options.taskHistory.updateTaskUsage).toHaveBeenCalledWith("task-1", {
+		expect(options.taskHistory.updateTaskUsage).toHaveBeenCalledWith("session-123", {
 			tokensIn: 3,
 			tokensOut: 4,
 			cacheReads: 5,
@@ -242,7 +267,7 @@ describe("SdkSessionEventCoordinator", () => {
 			],
 			event,
 		)
-		expect(options.taskHistory.updateTaskUsage).toHaveBeenCalledWith("task-1", {
+		expect(options.taskHistory.updateTaskUsage).toHaveBeenCalledWith("session-123", {
 			tokensIn: 10,
 			tokensOut: 5,
 			totalCost: 0,
@@ -346,6 +371,8 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 		messageTranslatorState: new MessageTranslatorState(),
 		sessions: {
 			getActiveSession: vi.fn(() => activeSession),
+			getSession: vi.fn((sessionId: string) => (sessionId === activeSession.sessionId ? activeSession : undefined)),
+			getSelectedSessionId: vi.fn(() => activeSession.sessionId),
 			setRunning: vi.fn(),
 		},
 		messages: {
@@ -374,6 +401,8 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 	} as unknown as SdkSessionEventCoordinatorOptions & {
 		sessions: SdkSessionEventCoordinatorOptions["sessions"] & {
 			getActiveSession: ReturnType<typeof vi.fn>
+			getSession: ReturnType<typeof vi.fn>
+			getSelectedSessionId: ReturnType<typeof vi.fn>
 			setRunning: ReturnType<typeof vi.fn>
 		}
 		messages: SdkSessionEventCoordinatorOptions["messages"] & { appendAndEmit: ReturnType<typeof vi.fn> }
@@ -400,12 +429,13 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 	}
 }
 
-function makeActiveSession(input: Partial<{ isRunning: boolean }> = {}) {
+function makeActiveSession(input: Partial<{ isRunning: boolean; sessionId: string }> = {}) {
+	const sessionId = input.sessionId ?? "session-123"
 	return {
-		sessionId: "session-123",
+		sessionId,
 		sdkHost: {},
 		unsubscribe: vi.fn(),
-		startResult: { sessionId: "session-123" },
+		startResult: { sessionId },
 		isRunning: input.isRunning ?? true,
 	}
 }

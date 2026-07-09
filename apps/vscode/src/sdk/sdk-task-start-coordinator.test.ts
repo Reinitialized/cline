@@ -44,6 +44,7 @@ describe("SdkTaskStartCoordinator", () => {
 			}),
 		)
 		expect(state.task?.taskId).toBe(sessionId)
+		expect(options.registerTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: sessionId }))
 		expect(options.taskHistory.updateTaskHistoryItem).toHaveBeenCalledWith(
 			expect.objectContaining({ id: sessionId, task: "hello @file", modelId: "model" }),
 		)
@@ -246,6 +247,7 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 		setTask: vi.fn((task) => {
 			state.task = task as { taskId: string } | undefined
 		}),
+		registerTask: vi.fn(),
 		onAskResponse: vi.fn().mockResolvedValue(undefined),
 		onCancelTask: vi.fn().mockResolvedValue(undefined),
 		getWorkspaceRoot: vi.fn().mockResolvedValue("/workspace"),
@@ -274,6 +276,7 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 		buildStartSessionInput: ReturnType<typeof vi.fn>
 		createHistoryItemFromSession: ReturnType<typeof vi.fn>
 		clearTask: ReturnType<typeof vi.fn>
+		registerTask: ReturnType<typeof vi.fn>
 		createTempSessionHost: ReturnType<typeof vi.fn>
 		loadInitialMessages: ReturnType<typeof vi.fn>
 		resolveContextMentions: ReturnType<typeof vi.fn>

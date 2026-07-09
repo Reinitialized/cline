@@ -9,6 +9,8 @@ export type SessionEventListener = (messages: ClineMessage[], event: CoreSession
 
 export interface SdkMessageCoordinatorOptions {
 	getTask: () => TaskProxy | undefined
+	getTaskBySessionId?: (sessionId: string | undefined) => TaskProxy | undefined
+	isSelectedSession?: (sessionId: string | undefined) => boolean
 	/**
 	 * The process-wide id/seq/epoch authority. When provided, every message flowing to the
 	 * webview is stamped with a fresh `seq` and the current `epoch` so the webview can merge
@@ -71,12 +73,19 @@ export class SdkMessageCoordinator {
 		}
 	}
 
-	appendMessages(messages: ClineMessage[]): void {
+	private getTaskForSession(sessionId?: string): TaskProxy | undefined {
+		if (sessionId && this.options.getTaskBySessionId) {
+			return this.options.getTaskBySessionId?.(sessionId)
+		}
+		return this.options.getTask()
+	}
+
+	appendMessages(messages: ClineMessage[], sessionId?: string): void {
 		// Stamp seq/epoch BEFORE storing/emitting so both the message-state handler and the
 		// partial-message stream carry identical, freshness-ordered, epoch-fenced messages.
 		this.stamp(messages)
 
-		const task = this.options.getTask()
+		const task = this.getTaskForSession(sessionId)
 		if (!task?.messageStateHandler) {
 			return
 		}
@@ -84,10 +93,10 @@ export class SdkMessageCoordinator {
 		task.messageStateHandler.addMessages(messages)
 	}
 
-	replaceMessages(messages: ClineMessage[]): void {
+	replaceMessages(messages: ClineMessage[], sessionId?: string): void {
 		this.stamp(messages)
 
-		const task = this.options.getTask()
+		const task = this.getTaskForSession(sessionId)
 		if (!task?.messageStateHandler) {
 			return
 		}
@@ -96,7 +105,16 @@ export class SdkMessageCoordinator {
 	}
 
 	appendAndEmit(messages: ClineMessage[], event: CoreSessionEvent): void {
-		this.appendMessages(messages)
+		const sessionId = event.payload.sessionId
+		this.appendMessages(messages, sessionId)
+
+		// Background tasks keep their own full message state, but partial streaming is
+		// reserved for the selected task so another running task cannot mutate the
+		// visible chat row while the user is focused elsewhere.
+		if (this.options.isSelectedSession?.(sessionId) === false) {
+			return
+		}
+
 		this.emitSessionEvents(messages, event)
 	}
 

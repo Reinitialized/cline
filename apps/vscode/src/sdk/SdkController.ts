@@ -153,7 +153,7 @@ export class Controller {
 	private messageTranslatorState: MessageTranslatorState
 	private turnStateTracker!: TurnStateTracker
 	private messages: SdkMessageCoordinator
-	private sessions: SdkSessionLifecycle
+	private sessions!: SdkSessionLifecycle
 	private interactions: SdkInteractionCoordinator
 	private sessionConfigBuilder: SdkSessionConfigBuilder
 	private taskHistory: SdkTaskHistory
@@ -166,6 +166,7 @@ export class Controller {
 	private compaction: SdkCompactionCoordinator
 	private sessionEvents: SdkSessionEventCoordinator
 	private sessionHistory: SdkSessionHistoryLoader
+	private readonly tasksBySessionId = new Map<string, TaskProxy>()
 	private readonly sdkTelemetry: VscodeSdkTelemetryHandle
 	private readonly providerFailureTelemetryTurnGate = new ProviderFailureTelemetryTurnGate()
 	private readonly providerConfigStore: ProviderConfigStore
@@ -260,6 +261,8 @@ export class Controller {
 		this.turnStateTracker = new TurnStateTracker(this.messageTranslatorState.getMinter())
 		this.messages = new SdkMessageCoordinator({
 			getTask: () => this.task,
+			getTaskBySessionId: (sessionId) => (sessionId ? this.tasksBySessionId.get(sessionId) : undefined),
+			isSelectedSession: (sessionId) => !sessionId || this.sessions.getSelectedSessionId() === sessionId,
 			// Stamp seq/epoch on every message flowing to the webview from the shared authority.
 			getMinter: () => this.messageTranslatorState.getMinter(),
 		})
@@ -458,9 +461,11 @@ export class Controller {
 			messages: this.messages,
 			taskHistory: this.taskHistory,
 			getTask: () => this.task,
+			getTaskById: (taskId) => this.tasksBySessionId.get(taskId),
 			setTask: (task) => {
-				this.task = task
+				this.selectTask(task)
 			},
+			unregisterTask: (taskId) => this.tasksBySessionId.delete(taskId),
 			onAskResponse: (text, images, files) => this.askResponse(text, images, files),
 			resetMessageTranslator: () => this.resetMessageTranslatorAndFence(),
 			// Bump the epoch synchronously before abort so straggler events from the cancelled
@@ -482,11 +487,11 @@ export class Controller {
 			createHistoryItemFromSession,
 			clearTask: async () => {
 				this.pendingClineAuthRetryPrompt = undefined
-				await this.taskControl.clearTask()
 			},
 			setTask: (task) => {
-				this.task = task
+				this.selectTask(task)
 			},
+			registerTask: (task) => this.registerTask(task),
 			onAskResponse: (text, images, files) => this.askResponse(text, images, files),
 			onCancelTask: () => this.cancelTask(),
 			getWorkspaceRoot: () => this.getWorkspaceRoot(),
@@ -553,6 +558,37 @@ export class Controller {
 			})
 
 		Logger.log("[SdkController] Initialized with SDK adapter layer + gRPC bridge + auth services")
+	}
+
+	private registerTask(task: TaskProxy | undefined): void {
+		if (!task) {
+			return
+		}
+		for (const [sessionId, registeredTask] of this.tasksBySessionId) {
+			if (registeredTask === task && sessionId !== task.taskId) {
+				this.tasksBySessionId.delete(sessionId)
+			}
+		}
+		this.tasksBySessionId.set(task.taskId, task)
+	}
+
+	private selectTask(task: TaskProxy | undefined): void {
+		this.task = task
+		if (task) {
+			this.registerTask(task)
+			this.sessions.selectSession(task.taskId)
+		}
+	}
+
+	private async stopAllTasks(reason: string): Promise<void> {
+		this.pendingClineAuthRetryPrompt = undefined
+		await this.sessions.dispose(reason)
+		for (const task of this.tasksBySessionId.values()) {
+			task.messageStateHandler.clear()
+		}
+		this.tasksBySessionId.clear()
+		this.task = undefined
+		this.resetMessageTranslatorAndFence()
 	}
 
 	getProviderConfigStore(): ProviderConfigStore {
@@ -669,8 +705,7 @@ export class Controller {
 		this.messages.cancelPendingSave()
 		// Clear MCP tool list change callback before disposing McpHub
 		this.mcpHub?.clearToolListChangeCallback()
-		await this.clearTask()
-		await this.sessions.dispose("SdkController.dispose")
+		await this.stopAllTasks("SdkController.dispose")
 		await this.taskHistory.dispose()
 		this.mcpHub?.dispose?.()
 		this.messages.dispose()
@@ -1657,7 +1692,7 @@ export class Controller {
 	}
 
 	async deleteAllTaskHistory(): Promise<DeleteAllTaskHistoryCount> {
-		await this.clearTask()
+		await this.stopAllTasks("deleteAllTaskHistory")
 
 		const taskHistory = await this.taskHistory.listHistory({ hydrate: false })
 		const totalTasks = taskHistory.length
